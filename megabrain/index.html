@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bob Esponja Snake</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand"><span class="bubble">✦</span><div><p class="eyebrow">FENDA DO BIQUÍNI</p><h1>BOB ESPONJA <span>SNAKE</span></h1></div></div>
+      <div class="best">🏆 Recorde <strong id="best">0</strong></div>
+    </header>
+
+    <section id="menu" class="panel menu-panel">
+      <div class="intro">
+        <div class="sun-rays"></div>
+        <p class="eyebrow">UMA AVENTURA SUBMARINA</p>
+        <h2>Preparado para<br><span>mergulhar?</span></h2>
+        <p>Coma hambúrgueres, cresça e desvie dos obstáculos!</p>
+        <div class="sea-icons" aria-hidden="true">🫧　🪸　🐚　🫧</div>
+      </div>
+      <div class="choices">
+        <h3>1. Escolha seu personagem</h3>
+        <div class="character-options">
+          <button class="character selected" data-character="bob" aria-pressed="true">
+            <span class="avatar bob">🧽</span><strong>Bob Esponja</strong><small>O otimista da Fenda</small>
+          </button>
+          <button class="character" data-character="patrick" aria-pressed="false">
+            <span class="avatar patrick">⭐</span><strong>Patrick</strong><small>O amigo estrela-do-mar</small>
+          </button>
+        </div>
+        <h3>2. Escolha a dificuldade</h3>
+        <div class="difficulty-options">
+          <button class="difficulty selected" data-difficulty="easy" aria-pressed="true"><span>🐚</span><div><strong>Fácil</strong><small>Mais lento · Poucos obstáculos</small></div><i>✓</i></button>
+          <button class="difficulty" data-difficulty="medium" aria-pressed="false"><span>🪸</span><div><strong>Médio</strong><small>Velocidade moderada · Mais obstáculos</small></div><i>✓</i></button>
+          <button class="difficulty" data-difficulty="hard" aria-pressed="false"><span>🌋</span><div><strong>Difícil</strong><small>Mais rápido · Muitos obstáculos</small></div><i>✓</i></button>
+        </div>
+        <button id="startBtn" class="primary">▶ COMEÇAR A JOGAR</button>
+        <button id="howBtn" class="text-button">Como jogar?</button>
+        <p id="howText" class="how-text hidden">Use as setas ou WASD para mudar de direção. Pegue os hambúrgueres para ganhar pontos e crescer. Não bata nas paredes, em si mesmo ou nas pedras!</p>
+      </div>
+    </section>
+
+    <section id="game" class="panel game-panel hidden">
+      <div class="game-head">
+        <div><p class="eyebrow">PERSONAGEM</p><strong id="playingAs">Bob Esponja</strong></div>
+        <div class="stat"><small>PONTUAÇÃO</small><strong id="score">0</strong></div>
+        <div class="stat"><small>DIFICULDADE</small><strong id="level">Fácil</strong></div>
+        <button id="pauseBtn" class="small-button" aria-label="Pausar jogo">Ⅱ</button>
+      </div>
+      <div class="board-wrap">
+        <canvas id="board" width="600" height="420" aria-label="Tabuleiro do jogo Snake"></canvas>
+        <div id="overlay" class="overlay hidden"><div class="overlay-card"><div id="overlayIcon" class="overlay-icon">⏸️</div><h2 id="overlayTitle">Jogo pausado</h2><p id="overlayText">Respire fundo, mergulhador!</p><button id="resumeBtn" class="primary">CONTINUAR</button><button id="restartBtn" class="secondary">RECOMEÇAR</button><button id="menuBtn" class="text-button">Voltar ao menu</button></div></div>
+      </div>
+      <div class="game-footer"><span>🍔 Hambúrguer = +10 pontos</span><span>Esc = pausar</span></div>
+      <div class="touch-controls" aria-label="Controles direcionais">
+        <button data-dir="up" aria-label="Cima">▲</button>
+        <div><button data-dir="left" aria-label="Esquerda">◀</button><button data-dir="down" aria-label="Baixo">▼</button><button data-dir="right" aria-label="Direita">▶</button></div>
+      </div>
+    </section>
+    <footer>🌊 Feito para se divertir no fundo do mar <span>•</span> HTML · CSS · JavaScript</footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -313,6 +313,11 @@ function obstacleCount() {
 
 let character = 'bob';
 let difficulty = 'easy';
+let gameMode = 'classic';
+let battleWave = 0;
+let battleEnemies = [];
+let battlePendingSpawns = 0;
+let battleEnemyId = 0;
 
 let snake = [];
 
@@ -389,7 +394,8 @@ function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMov
   clearTimeout(timer);
   if (paused || over || !menu.classList.contains('hidden')) return;
   timer = setTimeout(() => {
-    tick();
+    const deadline = lastMoveAt + motionDuration;
+    if (performance.now()+.5 >= deadline) tick(deadline);
     scheduleTick();
   }, Math.max(1, delay));
 }
@@ -443,12 +449,17 @@ function updateStatus() {
     badge.querySelector('progress').value = powers[type]-gameTime;
   }
   const defeated = beam?.defeated && beam.until > gameTime;
-  bossHealth.hidden = !plankton && !defeated;
-  bossHealth.value = plankton ? Math.max(0, 3-plankton.hits) : 0;
-  const bossLabel = plankton
+  const enemies=activeEnemies();
+  bossHealth.hidden = !enemies.length && !defeated;
+  bossHealth.max = gameMode==='battle' ? battleProfile(battleWave).count*3 : 3;
+  bossHealth.value = enemies.reduce((hp,enemy)=>hp+Math.max(0,3-enemy.hits),0);
+  const bossLabel = gameMode==='battle'
+    ? `⚔ Batalha · Onda ${battleWave} · ${enemies.length} Plankton(s) · Agressividade ${battleProfile(battleWave).aggression}`
+    : plankton
     ? `👁 Plankton · ${plankton.stunnedUntil > gameTime ? 'PARALISADO' : 'PERSEGUINDO!'}`
     : defeated ? 'PLANKTON DERROTADO · +50 PONTOS' : 'Bordas livres ↔ ↕';
   if (bossStatus.textContent !== bossLabel) bossStatus.textContent = bossLabel;
+  if(!paused && !over && menu.classList.contains('hidden') && currentMusicKey!==selectedMusicKey()) tocarMusica();
 }
 
 function activePowerTypes() {
@@ -456,13 +467,80 @@ function activePowerTypes() {
 }
 
 function chooseFoodType(roll = Math.random(), powerRoll = Math.random()) {
-  if (plankton) return bossNextFood;
+  if (activeEnemies().length) return bossNextFood;
   if (activePowerTypes().length >= MAX_ACTIVE_POWERS) return 'normal';
   if (roll >= settings[difficulty].specialChance) return 'normal';
   return ['ghost', 'drill', 'super', 'magnet'][Math.floor(powerRoll * 4)];
 }
 
+function activeEnemies() {
+  return gameMode==='battle' ? battleEnemies : (plankton ? [plankton] : []);
+}
+
+function battleProfile(wave) {
+  const stage=Math.min(30,Math.max(1,wave));
+  return stage<=3 ? {count:1,aggression:stage} : {
+    count:Math.min(10,2+Math.floor((stage-4)/3)),aggression:1+(stage-4)%3
+  };
+}
+
+function enemyColor(enemy) {
+  return ['#80c22f','#f5a23b','#ed4662'][(enemy.aggression || 1)-1];
+}
+
+function enemyInterval(enemy) {
+  return Math.max(70,settings[difficulty].bossInterval * [1,.72,.5][(enemy.aggression || 1)-1]);
+}
+
+function fillBattleWave() {
+  if(gameMode!=='battle' || !battlePendingSpawns) return;
+  const profile=battleProfile(battleWave);
+  const candidates=[];
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) {
+    const p={x,y};
+    if(torusDistance(p,snake[0])>=8 && !snake.some(s=>same(s,p)) &&
+       !obstacles.some(o=>same(o,p)) && !battleEnemies.some(e=>same(e,p)) && !(food && same(food,p))) candidates.push(p);
+  }
+  while(battlePendingSpawns>0 && candidates.length) {
+    const pos=candidates.splice(Math.floor(Math.random()*candidates.length),1)[0];
+    const enemy={...pos,id:++battleEnemyId,hits:0,stunnedUntil:0,aggression:profile.aggression,motion:null};
+    enemy.nextMoveAt=gameTime+enemyInterval(enemy);
+    battleEnemies.push(enemy);battlePendingSpawns--;
+  }
+}
+
+function startBattleWave() {
+  battleWave++;
+  battlePendingSpawns=battleProfile(battleWave).count;
+  bossNextFood='normal';
+  fillBattleWave();
+}
+
+function updateBattleEnemies() {
+  fillBattleWave();
+  for(const enemy of battleEnemies) {
+    if(enemy.stunnedUntil>gameTime) continue;
+    if(same(enemy,snake[0]) && !hasPower('super')) {endGame();return;}
+    const from={x:enemy.x,y:enemy.y};
+    let moved=false;
+    for(let catchup=0;gameTime>=enemy.nextMoveAt && catchup<4;catchup++) {
+      const moves=steps.map(d=>wrap({x:enemy.x+d.x,y:enemy.y+d.y}))
+        .filter(p=>!battleEnemies.some(other=>other!==enemy && same(other,p)));
+      moves.sort((a,b)=>torusDistance(a,snake[0])-torusDistance(b,snake[0]));
+      if(moves.length) {Object.assign(enemy,moves[0]);moved=true;}
+      enemy.nextMoveAt+=enemyInterval(enemy);
+      if(same(enemy,snake[0]) && !hasPower('super')) {endGame();return;}
+    }
+    if(moved) enemy.motion={from,startedAt:performance.now(),duration:Math.min(currentSpeed,enemyInterval(enemy))};
+  }
+}
+
+function laserTarget() {
+  return activeEnemies().reduce((best,enemy)=>!best || torusDistance(enemy,snake[0])<torusDistance(best,snake[0]) ? enemy : best,null);
+}
+
 function spawnPlankton() {
+  if(gameMode==='battle') {fillBattleWave();return;}
   if (plankton || !pendingPlanktons) return;
   const head = snake[0];
   const cells = [];
@@ -493,7 +571,7 @@ function addScore(amount) {
     generateObstacles(obstacleCount());
   }
   scenePhase = Math.floor(score / 100);
-  pendingPlanktons += Math.floor(score/200)-Math.floor(previous/200);
+  if(gameMode==='classic') pendingPlanktons += Math.floor(score/200)-Math.floor(previous/200);
   spawnPlankton();
   refreshSpeed();
 }
@@ -501,20 +579,25 @@ function addScore(amount) {
 function collectFood() {
   playEffect('collect');
   const type = food.type || 'normal';
-  if (plankton) bossNextFood = type === 'normal' ? 'red' : 'normal';
+  if (activeEnemies().length) bossNextFood = type === 'normal' ? 'red' : 'normal';
   if (foodTypes[type].duration &&
       (hasPower(type) || activePowerTypes().length < MAX_ACTIVE_POWERS)) {
     powers[type] = gameTime + foodTypes[type].duration;
   }
-  if (type === 'red' && plankton) {
+  const target=laserTarget();
+  if (type === 'red' && target) {
     playEffect('laser');
-    beam = {from: {...snake[0]}, to: {...plankton}, until: gameTime + 400};
-    plankton.hits++;
-    beam.defeated = plankton.hits >= 3;
-    plankton.stunnedUntil = gameTime + 3000;
-    if (plankton.hits >= 3) {
-      plankton = null;
-      addScore(50);
+    beam={from:{...snake[0]},to:{...target},until:gameTime+400};
+    target.hits++;
+    beam.defeated=target.hits>=3;
+    target.stunnedUntil=gameTime+3000;
+    if(gameMode==='battle') target.nextMoveAt=target.stunnedUntil+enemyInterval(target);
+    if(target.hits>=3) {
+      if(gameMode==='battle') {
+        battleEnemies=battleEnemies.filter(enemy=>enemy!==target);
+        addScore(50);
+        if(!battleEnemies.length && !battlePendingSpawns) startBattleWave();
+      } else {plankton=null;addScore(50);}
     }
   }
   addScore(10);
@@ -531,6 +614,7 @@ function moveMagnet() {
 }
 
 function updatePlankton() {
+  if(gameMode==='battle') {updateBattleEnemies();return;}
   if (!plankton || plankton.stunnedUntil > gameTime) return;
   if (same(plankton,snake[0]) && !hasPower('super')) { endGame(); return; }
   if (gameTime >= bossMoveTime) {
@@ -553,11 +637,16 @@ let best = Number(
 // MÚSICAS
 // =====================================
 
-const musicas = {
-  easy: new Audio('musicas/facil.mp3'),
-  medium: new Audio('musicas/medio-dificil.mp3'),
-  hard: new Audio('musicas/medio-dificil.mp3')
-};
+const musicSources = Object.fromEntries([
+  'bgm_easy_explore','bgm_easy_boss','bgm_hard_explore','bgm_hard_boss','bgm_battle_mode'
+].map(key=>[key,`musicas/${key}.mp3`]));
+const musicTracks=Object.fromEntries(Object.entries(musicSources).map(([key,src])=>[key,new Audio(src)]));
+const musicas={easy:musicTracks.bgm_easy_explore,medium:musicTracks.bgm_hard_explore,hard:musicTracks.bgm_hard_explore};
+function allMusicTracks() {return [...new Set([...Object.values(musicas),...Object.values(musicTracks)])];}
+function selectedMusicKey() {
+  if(gameMode==='battle') return 'bgm_battle_mode';
+  return `bgm_${difficulty==='easy'?'easy':'hard'}_${activeEnemies().length?'boss':'explore'}`;
+}
 
 let musicMuted = localStorage.getItem('bobSnakeMusicMuted') === 'true';
 let effectsMuted = localStorage.getItem('bobSnakeEffectsMuted') === 'true';
@@ -569,16 +658,19 @@ const muteMusicBtn = document.getElementById('muteMusicBtn');
 const muteEffectsBtn = document.getElementById('muteEffectsBtn');
 const muteAllBtn = document.getElementById('muteAllBtn');
 
-Object.values(musicas).forEach(musica => {
+allMusicTracks().forEach(musica => {
   musica.muted = musicMuted || allMuted;
   musica.loop = true;
   musica.volume = 0.35;
 });
 
 let musicaAtual = null;
+let currentMusicKey = null;
 
 function tocarMusica() {
-  const musicaSelecionada = musicas[difficulty];
+  const key=selectedMusicKey();
+  currentMusicKey=key;
+  const musicaSelecionada = gameMode==='classic' && !activeEnemies().length ? musicas[difficulty] : musicTracks[key];
 
   if (
     musicaAtual === musicaSelecionada &&
@@ -592,6 +684,7 @@ function tocarMusica() {
     musicaAtual = musicaSelecionada;
     musicaAtual.currentTime = 0;
   }
+  currentMusicKey=key;
   musicaAtual.muted = musicMuted || allMuted;
 
   musicaAtual.play().catch(erro => {
@@ -603,12 +696,13 @@ function tocarMusica() {
 }
 
 function pararMusica() {
-  Object.values(musicas).forEach(musica => {
+  allMusicTracks().forEach(musica => {
     musica.pause();
     musica.currentTime = 0;
   });
 
   musicaAtual = null;
+  currentMusicKey = null;
 }
 
 // Tons originais: coleta ascendente, laser descendente e queda grave na morte.
@@ -673,7 +767,7 @@ function updateMuteButton() {
 }
 
 function applyAudioPreferences() {
-  Object.values(musicas).forEach(musica=>{musica.muted=musicMuted || allMuted;});
+  allMusicTracks().forEach(musica=>{musica.muted=musicMuted || allMuted;});
   if (effectsGain) effectsGain.gain.setValueAtTime(effectsMuted || allMuted ? 0 : .32,effectsContext.currentTime);
   if (effectsMuted || allMuted) stopEffects();
   localStorage.setItem('bobSnakeMusicMuted',String(musicMuted));
@@ -731,6 +825,13 @@ document.querySelectorAll('.difficulty').forEach(btn => {
 // INSTRUÇÕES
 // =====================================
 
+document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
+  gameMode=button.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(item=>{
+    const selected=item===button;item.classList.toggle('selected',selected);item.setAttribute('aria-pressed',String(selected));
+  });
+}));
+
 document.getElementById('howBtn').addEventListener('click', () => {
   const hidden = document.getElementById('howText').classList.toggle('hidden');
   document.getElementById('howBtn').setAttribute('aria-expanded', String(!hidden));
@@ -777,6 +878,10 @@ function startGame() {
   directionQueue = [];
   clearPadPointer();
   plankton = null;
+  battleEnemies = [];
+  battleWave = 0;
+  battlePendingSpawns = 0;
+  battleEnemyId = 0;
   pendingPlanktons = 0;
   beam = null;
   bossNextFood = 'normal';
@@ -810,6 +915,7 @@ function startGame() {
 
   const count = obstacleCount();
   generateObstacles(count);
+  if(gameMode==='battle') startBattleWave();
 
   if (!placeFood()) return;
 
@@ -902,7 +1008,7 @@ function generateObstacles(count) {
       Math.abs(p.y - head.y) <= 2;
 
     if (
-      !(plankton && same(plankton,p)) &&
+      !activeEnemies().some(enemy=>same(enemy,p)) &&
       !onSnake &&
       !onFood &&
       !onExisting &&
@@ -949,7 +1055,7 @@ function connectedArena(rocks) {
 function placeFood() {
   // Cada candidato possui um caminho sem atravessar o corpo e espaço para
   // continuar depois de comer. A simulação inclui o crescimento da cobra.
-  const blocked = new Set([...obstacles, ...snake.slice(1), ...(plankton ? [plankton] : [])].map(cellKey));
+  const blocked = new Set([...obstacles, ...snake.slice(1), ...activeEnemies()].map(cellKey));
   const parents = new Map([[cellKey(snake[0]), null]]);
   const queue = [snake[0]];
   for (let i = 0; i < queue.length; i++) {
@@ -972,7 +1078,7 @@ function placeFood() {
       body.unshift(p);
       if (!same(p, candidate)) body.pop();
     }
-    const occupied = new Set([...obstacles, ...body.slice(1, -1), ...(plankton ? [plankton] : [])].map(cellKey));
+    const occupied = new Set([...obstacles, ...body.slice(1, -1), ...activeEnemies()].map(cellKey));
     const escape = steps.some(d => {
       const p = wrap({x:candidate.x+d.x, y:candidate.y+d.y});
       return !occupied.has(cellKey(p));
@@ -993,11 +1099,11 @@ function placeFood() {
 // ATUALIZAR MOVIMENTAÇÃO DA COBRA
 // =====================================
 
-function tick() {
+function tick(stepAt = performance.now()) {
   if (paused || over) return;
   previousSnake = snake.map(p => ({...p}));
   previousFood = food && {...food};
-  lastMoveAt = performance.now();
+  lastMoveAt = stepAt;
   inputMotion = null;
   motionDuration = currentSpeed;
   gameTime += currentSpeed;
@@ -1151,8 +1257,17 @@ function measurePadHitAreas() {
 }
 
 function steerFromPointer(event) {
-  const hit = padHitAreas.find(({rect}) => event.clientX >= rect.left && event.clientX <= rect.right &&
+  let hit = padHitAreas.find(({rect}) => event.clientX >= rect.left && event.clientX <= rect.right &&
     event.clientY >= rect.top && event.clientY <= rect.bottom);
+  if(!hit) {
+    let nearest=101;
+    for(const area of padHitAreas) {
+      const dx=Math.max(area.rect.left-event.clientX,0,event.clientX-area.rect.right);
+      const dy=Math.max(area.rect.top-event.clientY,0,event.clientY-area.rect.bottom);
+      const distance=dx*dx+dy*dy;
+      if(distance<nearest) {nearest=distance;hit=area;}
+    }
+  }
   const button = hit?.button;
   if ((button?.dataset.dir || null) === padDirection) return;
   directionPad.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
@@ -1204,6 +1319,7 @@ function togglePause() {
     lastMoveAt += elapsed;
     if (inputMotion) {inputMotion.startedAt += elapsed;inputMotion.tickAt = lastMoveAt;}
     if (planktonMotion) planktonMotion.startedAt += elapsed;
+    for(const enemy of battleEnemies) if(enemy.motion) enemy.motion.startedAt += elapsed;
   }
   clearPadPointer();
   paused = !paused;
@@ -1663,13 +1779,17 @@ function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
 }
 
 function drawPlankton(now = performance.now()) {
-  if(!plankton) return;
-  const motion = planktonMotion;
+  for(const enemy of activeEnemies()) drawEnemy(enemy,now);
+}
+
+function drawEnemy(enemy,now) {
+  const motion = gameMode==='battle' ? enemy.motion : planktonMotion;
   const alpha = !paused && !over && motion ? Math.min(1,(now-motion.startedAt)/motion.duration) : 1;
-  const position = interpolateCell(motion?.from || plankton,plankton,alpha);
+  const position = interpolateCell(motion?.from || enemy,enemy,alpha);
   paintWrapped(position, (x,y) => {
   ctx.save();ctx.translate(x,y);
-  ctx.fillStyle=plankton.stunnedUntil>gameTime?'#66e6ff':'#80c22f';
+  ctx.fillStyle=enemyColor(enemy);
+  if(enemy.stunnedUntil>gameTime) {ctx.shadowColor='#66e6ff';ctx.shadowBlur=8;}
   roundRect(4,3,12,16,5);ctx.fill();
   ctx.strokeStyle='#224e24';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(6,4);ctx.lineTo(2,0);ctx.moveTo(14,4);ctx.lineTo(18,0);ctx.stroke();
   ctx.fillStyle='#fff4a3';ctx.beginPath();ctx.ellipse(10,9,5,4,0,0,Math.PI*2);ctx.fill();

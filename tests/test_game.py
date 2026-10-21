@@ -736,6 +736,81 @@ class GameTests(unittest.TestCase):
         self.page.wait_for_function('!document.fullscreenElement')
         self.assertTrue(self.page.locator('#menu').is_visible())
 
+    def test_battle_mode_can_be_selected_from_menu_on_mobile(self):
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.reload(wait_until='domcontentloaded')
+        self.page.locator('[data-mode="battle"]').click()
+        self.assertEqual(self.page.locator('[data-mode="battle"]').get_attribute('aria-pressed'),'true')
+        self.page.locator('#startBtn').click()
+        self.check("assert(gameMode==='battle' && battleEnemies.length===1 && COLS===18,'mobile battle start');")
+
+    def test_all_five_music_files_decode_in_browser(self):
+        self.page.evaluate("""async () => {
+          await Promise.all(Object.values(musicTracks).map(track=>new Promise((resolve,reject)=>{
+            if(track.readyState>=1 && track.duration>0) return resolve();
+            track.addEventListener('loadedmetadata',()=>track.duration>0?resolve():reject(Error('empty audio')),{once:true});
+            track.addEventListener('error',()=>reject(Error(track.src)),{once:true});
+            track.preload='metadata';track.load();
+          })));
+        }""")
+
+    def test_battle_progression_health_and_laser_target(self):
+        self.check("""
+          gameMode='battle';startGame();clearInterval(timer);
+          assert(battleWave===1 && battleEnemies.length===1,'starts with enemy');
+          obstacles=[];
+          for(let wave=1;wave<=31;wave++) {
+            const profile=battleProfile(wave);
+            assert(battleEnemies.length===profile.count,'wave count '+wave);
+            assert(battleEnemies.every(e=>e.aggression===profile.aggression),'aggression');
+            const ids=new Set(battleEnemies.map(e=>`${e.x},${e.y}`));
+            assert(ids.size===battleEnemies.length,'distinct spawn positions');
+            const victims=[...battleEnemies];
+            for(const enemy of victims) {
+              for(let hit=1;hit<=3;hit++) {
+                const target=laserTarget();
+                const oldHits=target.hits;
+                food={...snake[0],type:'red'};collectFood();
+                assert(target.hits===oldHits+1,'nearest target receives ray');
+                assert(target.stunnedUntil===gameTime+3000,'stun');
+              }
+            }
+            assert(battleWave===wave+1,'advance after group defeated');
+          }
+          assert(battleEnemies.length===10 && battleEnemies.every(e=>e.aggression===3),'cap');
+          updateStatus();assert(bossHealth.max===30,'group health');
+          const target=laserTarget();food={...snake[0],type:'red'};collectFood();updateStatus();
+          assert(bossHealth.value===29,'one hit reduces group health');
+          assert(new Set([1,2,3].map(aggression=>enemyColor({aggression}))).size===3,'colors');
+          assert(enemyInterval({aggression:3})<enemyInterval({aggression:2}) &&
+            enemyInterval({aggression:2})<enemyInterval({aggression:1}),'speed');
+        """)
+
+    def test_battle_chase_stun_and_music_state(self):
+        self.check("""
+          for(const level of ['easy','medium','hard']) {
+            difficulty=level;gameMode='classic';startGame();clearInterval(timer);
+            const prefix=level==='easy'?'easy':'hard';
+            assert(selectedMusicKey()===`bgm_${prefix}_explore`,'explore track');
+            pendingPlanktons=1;spawnPlankton();updateStatus();
+            assert(currentMusicKey===`bgm_${prefix}_boss`,'automatic boss track');
+            plankton=null;updateStatus();
+            assert(currentMusicKey===`bgm_${prefix}_explore`,'return exploration');
+          }
+          gameMode='battle';startGame();clearInterval(timer);obstacles=[];
+          assert(currentMusicKey==='bgm_battle_mode','battle music');
+          const enemy=battleEnemies[0];
+          const before=torusDistance(enemy,snake[0]);
+          gameTime=enemy.nextMoveAt;updateBattleEnemies();
+          assert(torusDistance(enemy,snake[0])<before,'chase');
+          const pos={x:enemy.x,y:enemy.y};
+          enemy.stunnedUntil=gameTime+3000;enemy.nextMoveAt=enemy.stunnedUntil+enemyInterval(enemy);
+          gameTime+=2000;updateBattleEnemies();assert(same(pos,enemy),'stun prevents movement');
+          gameTime=enemy.nextMoveAt;updateBattleEnemies();assert(!same(pos,enemy),'resume chase');
+          for(const [key,track] of Object.entries(musicTracks))
+            assert(track.src.endsWith(`/musicas/${key}.mp3`),'correct file');
+        """)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -46,3 +46,7 @@ automática do teclado, direções neutras e troca de controle entre dois dedos.
 Os efeitos de coleta, laser e morte são renderizados com OfflineAudioContext
 para verificar áudio real e ausência de clipping, sem arquivos de terceiros.
 Também são testados os controles independentes de música, efeitos e silêncio geral.
+
+A Batalha é validada até a onda máxima, incluindo contagem e cores de inimigos,
+velocidade, perseguição, paralisia, alvo do laser e vida do grupo. As cinco músicas
+são decodificadas no navegador e a troca exploração/chefe é testada por dificuldade.

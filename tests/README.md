@@ -29,4 +29,6 @@ conferidos também no navegador do dispositivo.
 
 Os testes da sobreposição garantem que coletar/expirar poderes não altera a
 posição ou tamanho do mapa em mobile e PC, com e sem tela cheia, e que a
-indicação muda de canto para evitar a cabeça sem interceptar os controles.
+indicação permanece fixa no canto superior esquerdo sem interceptar os controles.
+Também verificam o limite de três poderes, o bloqueio de especiais até um efeito
+expirar, o mapa mobile menor e a fila de curvas rápidas sem inversão da cobra.

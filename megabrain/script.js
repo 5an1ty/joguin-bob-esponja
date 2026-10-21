@@ -326,6 +326,8 @@ const foodTypes = {
 };
 let gameTime = 0;
 let powers = {};
+let directionQueue = [];
+const MAX_ACTIVE_POWERS = 3;
 let plankton = null;
 let pendingPlanktons = 0;
 let bossMoveTime = 0;
@@ -368,7 +370,7 @@ function updateStatus() {
   const hint = food ? `NO MAPA · ${foodDescriptions[type]}` : 'Sem hambúrguer disponível';
   if (foodHint.textContent !== hint) foodHint.textContent = hint;
   foodHint.style.setProperty('--food-color', foodTypes[type].color);
-  const active = Object.keys(powers).filter(hasPower);
+  const active = activePowerTypes().slice(0, MAX_ACTIVE_POWERS);
   const key = active.join(',');
   powerStatus.hidden = active.length === 0;
   // Mantém os cartões no DOM durante a contagem, sem recriá-los a cada passo.
@@ -408,38 +410,15 @@ function updateStatus() {
     ? `👁 Plankton · ${plankton.stunnedUntil > gameTime ? 'PARALISADO' : 'PERSEGUINDO!'}`
     : defeated ? 'PLANKTON DERROTADO · +50 PONTOS' : 'Bordas livres ↔ ↕';
   if (bossStatus.textContent !== bossLabel) bossStatus.textContent = bossLabel;
-  positionPowerHud();
 }
 
-// A indicação flutua sobre o canvas sem participar das medidas do tabuleiro.
-function positionPowerHud() {
-  if (powerStatus.hidden || !snake.length) return;
-  const board = canvas.getBoundingClientRect();
-  if (!board.width || !board.height) return;
-  const width = (powerStatus.offsetWidth + 12) * COLS / board.width;
-  const height = (powerStatus.offsetHeight + 12) * ROWS / board.height;
-  const targets = [
-    ...snake.map((p,i) => ({...p,weight:i === 0 ? 150 : 3})),
-    {...wrap({x:snake[0].x+direction.x,y:snake[0].y+direction.y}),weight:150},
-    ...(food ? [{...food,weight:100}] : []),
-    ...(plankton ? [{...plankton,weight:100}] : []),
-    ...obstacles.map(p => ({...p,weight:1}))
-  ];
-  const corners = ['top-left','top-right','bottom-left','bottom-right'];
-  const scores = corners.map(corner => {
-    const left = corner.endsWith('left') ? 0 : COLS-width;
-    const top = corner.startsWith('top') ? 0 : ROWS-height;
-    return targets.reduce((score,p) => score +
-      (p.x+1>left && p.x<left+width && p.y+1>top && p.y<top+height ? p.weight : 0),0);
-  });
-  const best = scores.indexOf(Math.min(...scores));
-  const current = corners.indexOf(powerStatus.dataset.corner);
-  // Evita ficar trocando de canto por causa de uma única pedra ao fundo.
-  if (current < 0 || scores[current] > scores[best]+2) powerStatus.dataset.corner = corners[best];
+function activePowerTypes() {
+  return Object.keys(powers).filter(type => foodTypes[type]?.duration && hasPower(type));
 }
 
 function chooseFoodType(roll = Math.random(), powerRoll = Math.random()) {
   if (plankton) return bossNextFood;
+  if (activePowerTypes().length >= MAX_ACTIVE_POWERS) return 'normal';
   if (roll >= settings[difficulty].specialChance) return 'normal';
   return ['ghost', 'drill', 'super', 'magnet'][Math.floor(powerRoll * 4)];
 }
@@ -483,7 +462,10 @@ function addScore(amount) {
 function collectFood() {
   const type = food.type || 'normal';
   if (plankton) bossNextFood = type === 'normal' ? 'red' : 'normal';
-  if (foodTypes[type].duration) powers[type] = gameTime + foodTypes[type].duration;
+  if (foodTypes[type].duration &&
+      (hasPower(type) || activePowerTypes().length < MAX_ACTIVE_POWERS)) {
+    powers[type] = gameTime + foodTypes[type].duration;
+  }
   if (type === 'red' && plankton) {
     beam = {from: {...snake[0]}, to: {...plankton}, until: gameTime + 400};
     plankton.hits++;
@@ -656,6 +638,8 @@ function startGame() {
   score = 0;
   gameTime = 0;
   powers = {};
+  directionQueue = [];
+  clearPadPointer();
   plankton = null;
   pendingPlanktons = 0;
   beam = null;
@@ -883,8 +867,11 @@ function tick() {
   motionDuration = currentSpeed;
   gameTime += currentSpeed;
   refreshSpeed();
+  const previousDirection = direction;
+  direction = directionQueue.shift() || nextDirection;
+  nextDirection = directionQueue[0] || direction;
   if (padDirection) setDirection(padDirection);
-  direction = nextDirection;
+  if (!same(previousDirection,direction)) motionDuration = Math.min(60,currentSpeed);
   moveMagnet();
   const head = wrap({x: snake[0].x + direction.x, y: snake[0].y + direction.y});
   // O ímã pode entregar a comida na posição atual da cabeça.
@@ -942,13 +929,11 @@ function setDirection(dir) {
 
   const d = dirs[dir];
 
-  // Impedir que a cobra inverta a direção
-  if (
-    d &&
-    !(d.x === -direction.x && d.y === -direction.y)
-  ) {
-    nextDirection = d;
-  }
+  // Guarda duas curvas rápidas em ordem, sem perder a segunda ou inverter o corpo.
+  const last = directionQueue[directionQueue.length-1] || direction;
+  if (!d || same(d,last) || (d.x === -last.x && d.y === -last.y) || directionQueue.length >= 2) return;
+  directionQueue.push(d);
+  nextDirection = directionQueue[0];
 }
 
 // =====================================
@@ -1005,6 +990,7 @@ function clearPadPointer(event) {
 function steerFromPointer(event) {
   const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-dir]');
   const button = hit && directionPad.contains(hit) ? hit : null;
+  if ((button?.dataset.dir || null) === padDirection) return;
   directionPad.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
   if (!button) { padDirection = null; return; }
   button.classList.add('pressed');
@@ -1020,11 +1006,14 @@ directionPad.addEventListener('pointerdown', event => {
   directionPad.setPointerCapture(event.pointerId);
   steerFromPointer(event);
 });
-directionPad.addEventListener('pointermove', event => {
+function movePadPointer(event) {
   if (event.pointerId !== padPointer) return;
-  event.preventDefault();
-  steerFromPointer(event);
-});
+  if (event.cancelable) event.preventDefault();
+  const samples = event.getCoalescedEvents?.();
+  steerFromPointer(samples?.length ? samples[samples.length-1] : event);
+}
+directionPad.addEventListener('pointermove', movePadPointer);
+if ('onpointerrawupdate' in window) directionPad.addEventListener('pointerrawupdate', movePadPointer);
 directionPad.addEventListener('pointerup', clearPadPointer);
 directionPad.addEventListener('pointercancel', clearPadPointer);
 directionPad.addEventListener('lostpointercapture', clearPadPointer);
@@ -1038,6 +1027,8 @@ function togglePause() {
   if (over) return;
 
   clearPadPointer();
+  directionQueue = [];
+  nextDirection = direction;
   paused = !paused;
 
   overlay.classList.toggle('hidden', !paused);
@@ -1144,14 +1135,14 @@ function fitFullscreenBoard() {
   const style = getComputedStyle(frame);
   const borderX = parseFloat(style.borderLeftWidth)+parseFloat(style.borderRightWidth);
   const borderY = parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth);
-  const width = Math.min(availableWidth, (availableHeight-borderY)*COLS/ROWS+borderX);
+  const scale = portable ? 0.84 : 1;
+  const width = Math.min(availableWidth, (availableHeight-borderY)*COLS/ROWS+borderX) * scale;
   const height = (width-borderX)*ROWS/COLS+borderY;
   game.style.setProperty('--map-width',`${width}px`);
   game.style.setProperty('--map-height',`${height}px`);
   game.style.setProperty('--map-left',`${margin+(availableWidth-width)/2}px`);
   game.style.setProperty('--map-top',`${top+(availableHeight-height)/2}px`);
   syncCanvasResolution();
-  positionPowerHud();
 }
 
 function interpolateCell(from, to, alpha) {

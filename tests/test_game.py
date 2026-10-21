@@ -92,7 +92,8 @@ class GameTests(unittest.TestCase):
 
     def test_all_food_powers_and_pause_timers(self):
         self.check('''
-          for(const type of ['ghost','drill','super','magnet']) {
+          for(const type of ['ghost','drill','magnet','super']) {
+            powers={};
             food={...snake[0],type};collectFood();clearInterval(timer);
             assert(hasPower(type),'collect '+type);
           }
@@ -285,9 +286,9 @@ class GameTests(unittest.TestCase):
                     Math.abs(canvas.width-r.width*devicePixelRatio)<=1 &&
                     Math.abs(canvas.height-r.height*devicePixelRatio)<=1;
                 }''')
-                page.evaluate("powers={ghost:8000,drill:8000,super:6000,magnet:10000};updateStatus()")
+                page.evaluate("powers={ghost:8000,drill:8000,super:6000};updateStatus()")
                 page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-                self.assertEqual(page.locator('.effect-badge').count(),4)
+                self.assertEqual(page.locator('.effect-badge').count(),3)
                 board=page.locator('#board').bounding_box()
                 hud=page.locator('.status-bar').bounding_box()
                 self.assertAlmostEqual(board['width']/board['height'],30/21,delta=.005)
@@ -368,13 +369,14 @@ class GameTests(unittest.TestCase):
           } finally {ctx.moveTo=original;}
         ''')
 
-    def test_mobile_map_larger_and_controls_above_bottom_notice(self):
+    def test_mobile_map_smaller_and_controls_above_bottom_notice(self):
         self.page.set_viewport_size({'width':390,'height':844})
         self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         board=self.page.locator('#board').bounding_box()
         pad=self.page.locator('.touch-controls').bounding_box()
-        self.assertGreater(board['width'],370)  # Antes: 352px neste viewport.
+        self.assertGreater(board['width'],290)
+        self.assertLess(board['width'],330)  # Antes: 376px neste viewport.
         self.assertAlmostEqual(board['width']/board['height'],30/21,delta=.005)
         self.assertGreaterEqual(844-(pad['y']+pad['height']),55)
         self.assertLess(board['y']+board['height'],pad['y'])
@@ -401,17 +403,54 @@ class GameTests(unittest.TestCase):
                         self.assertAlmostEqual(current[key],baseline[key],delta=.1,msg=f'{width}x{height} fullscreen={fullscreen}, power={kind}, {key}')
                     self.assertEqual(self.page.locator('#powerStatus').is_visible(),kind is not None)
 
-    def test_power_overlay_avoids_character_and_does_not_capture_input(self):
+    def test_power_overlay_stays_top_left_and_does_not_capture_input(self):
         self.check('''
           powers={ghost:8000};obstacles=[];food={x:15,y:10,type:'normal'};
           snake=[{x:0,y:0}];powerStatus.dataset.corner='top-left';updateStatus();
           assert(powerStatus.closest('.board-wrap'),'overlay inside map');
-          assert(powerStatus.dataset.corner!=='top-left','avoids head');
-          const corner=powerStatus.dataset.corner;
-          snake=[{x:corner.endsWith('right')?29:0,y:corner.startsWith('bottom')?20:0}];
-          updateStatus();assert(powerStatus.dataset.corner!==corner,'moves away as player approaches');
+          assert(powerStatus.dataset.corner==='top-left','fixed above head');
+          snake=[{x:29,y:20}];updateStatus();
+          assert(powerStatus.dataset.corner==='top-left','fixed when player moves');
+          assert(parseFloat(getComputedStyle(powerStatus.querySelector('strong')).fontSize)>=14,'larger label');
           assert(getComputedStyle(powerStatus).pointerEvents==='none','input passes through');
           powers={};updateStatus();assert(powerStatus.hidden,'hide without powers');
+        ''')
+
+    def test_three_power_limit_blocks_specials_until_expiry(self):
+        self.check('''
+          for(const type of ['ghost','drill','super']) {
+            food={...snake[0],type};collectFood();clearInterval(timer);
+          }
+          assert(activePowerTypes().length===3,'three simultaneous powers');
+          for(let i=0;i<20;i++) {
+            assert(chooseFoodType(0,i/20)==='normal','no specials at cap');
+            placeFood();assert(food.type==='normal','normal spawn at cap');
+          }
+          food={...snake[0],type:'magnet'};collectFood();clearInterval(timer);
+          assert(!hasPower('magnet') && activePowerTypes().length===3,'fourth power rejected');
+          gameTime=6001;
+          assert(activePowerTypes().length===2 && chooseFoodType(0,.9)==='magnet','specials return after expiry');
+          food={...snake[0],type:'magnet'};collectFood();clearInterval(timer);
+          assert(hasPower('magnet') && activePowerTypes().length===3,'freed slot reused');
+          plankton={x:20,y:15,hits:0,stunnedUntil:0};bossNextFood='red';
+          assert(chooseFoodType(0)==='red','boss red remains available at cap');
+          bossNextFood='normal';assert(chooseFoodType(0)==='normal','boss alternation preserved');
+        ''')
+
+    def test_fast_turns_are_buffered_without_reversing_or_changing_speed(self):
+        self.check('''
+          const speed=currentSpeed;
+          setDirection('up');setDirection('left');
+          assert(directionQueue.length===2,'two quick turns retained');
+          tick();assert(direction.y===-1 && snake[0].y===9,'first turn applied');
+          assert(motionDuration<=60 && currentSpeed===speed,'less visual delay with same game speed');
+          tick();assert(direction.x===-1 && snake[0].x===7,'second turn applied');
+          setDirection('right');assert(directionQueue.length===0,'reverse rejected');
+          // A gesture arriving while the buffer is full is retried while held.
+          setDirection('up');setDirection('right');padDirection='down';
+          tick();tick();tick();padDirection=null;
+          assert(direction.y===1,'held gesture not lost at full buffer');
+          paused=true;setDirection('left');assert(!directionQueue.length,'paused input ignored');
         ''')
 
     def test_native_fullscreen_and_exit_to_menu(self):

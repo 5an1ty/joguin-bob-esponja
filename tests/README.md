@@ -64,3 +64,10 @@ Todos os sons de hambúrgueres e do sopro são renderizados em áudio offline pa
 verificar sinal e ausência de clipping. A suíte também valida os eventos de cada
 poder, recorde persistente de abates separado da pontuação e velocidade mobile
 reduzida por dificuldade, fase e turbo, mantendo a velocidade original no PC.
+
+As partidas de teste que exercitam movimento retomam explicitamente a pausa
+inicial. Há testes próprios da pausa mobile em ambos os modos e três dificuldades,
+com entrada em tela cheia e botão Power. As habilidades de Bob, Patrick e Sandy
+são verificadas com recarga, colisões, dano, sons sintetizados e exclusão dos abates
+da bomba especial na recarga. Também são cobertos os multiplicadores do Clássico,
+a exclusividade da Sandy na Batalha e o tutorial que pausa no primeiro abate.

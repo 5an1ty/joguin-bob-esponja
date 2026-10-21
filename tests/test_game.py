@@ -42,8 +42,10 @@ class GameTests(unittest.TestCase):
         self.errors = []
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
         self.page.goto(f'http://127.0.0.1:{self.server.server_port}/', wait_until='domcontentloaded')
+        self.page.evaluate("localStorage.setItem('bobSnakeBattleTutorialSeen','true')")
         self.page.locator('#startBtn').click()
-        self.page.evaluate('clearInterval(timer); obstacles=[]; food={x:20,y:15,type:"normal"}')
+        self.page.evaluate("if(paused)togglePause()")
+        self.page.evaluate('startGame();if(paused)togglePause();clearInterval(timer); obstacles=[]; food={x:20,y:15,type:"normal"}')
 
     def tearDown(self):
         self.page.close()
@@ -71,7 +73,7 @@ class GameTests(unittest.TestCase):
     def test_powers_protect_only_their_own_collisions(self):
         self.check('''
           const reset = () => {
-            startGame();clearInterval(timer);obstacles=[];
+            startGame();if(paused)togglePause();clearInterval(timer);obstacles=[];
             food={x:20,y:15,type:'normal'};
           };
           for(const power of ['ghost','super']) {
@@ -104,7 +106,7 @@ class GameTests(unittest.TestCase):
           paused=false;gameTime=11000;refreshSpeed();
           assert(!hasPower('super') && !hasPower('magnet'),'powers expire');
           assert(currentSpeed===settings.easy.speed,'speed restored');
-          startGame();clearInterval(timer);
+          startGame();if(paused)togglePause();clearInterval(timer);
           assert(!Object.keys(powers).length && !plankton && gameTime===0,'restart reset');
         ''')
 
@@ -164,7 +166,7 @@ class GameTests(unittest.TestCase):
     def test_obstacles_safe_food_and_progression(self):
         self.check('''
           for(const level of ['easy','medium','hard']) {
-            difficulty=level;startGame();clearInterval(timer);
+            difficulty=level;startGame();if(paused)togglePause();clearInterval(timer);
             assert(obstacles.length===settings[level].obstacles,'obstacle count');
             assert(connectedArena(obstacles),'connected map');
             for(let i=0;i<20;i++) {
@@ -172,7 +174,7 @@ class GameTests(unittest.TestCase):
               assert(!obstacles.some(o=>same(o,food)) && !snake.some(s=>same(s,food)),'free food');
             }
           }
-          difficulty='easy';startGame();clearInterval(timer);
+          difficulty='easy';startGame();if(paused)togglePause();clearInterval(timer);
           const initial=obstacles.map(o=>({...o}));
           addScore(30);clearInterval(timer);
           assert(obstaclePhase===1 && !obstacles.some(o=>initial.some(p=>same(o,p))),'relocation');
@@ -287,6 +289,7 @@ class GameTests(unittest.TestCase):
             try:
                 page.goto(f'http://127.0.0.1:{self.server.server_port}/',wait_until='domcontentloaded')
                 page.locator('#startBtn').click()
+                page.evaluate("if(paused)togglePause()")
                 page.evaluate("clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
                 page.wait_for_function('''() => {
                   const r=canvas.getBoundingClientRect();
@@ -336,7 +339,7 @@ class GameTests(unittest.TestCase):
           }
         ''')
         self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("startGame();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate("startGame();if(paused)togglePause();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         hint=self.page.locator('#foodHint').bounding_box()
         board=self.page.locator('#board').bounding_box()
@@ -379,7 +382,7 @@ class GameTests(unittest.TestCase):
 
     def test_mobile_map_uses_available_area_above_controls(self):
         self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("startGame();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate("startGame();if(paused)togglePause();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         board=self.page.locator('#board').bounding_box()
         pad=self.page.locator('.touch-controls').bounding_box()
@@ -468,7 +471,7 @@ class GameTests(unittest.TestCase):
             page.evaluate('''() => {
               const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
               for(const level of ['easy','medium','hard']) {
-                difficulty=level;startGame();clearInterval(timer);
+                difficulty=level;startGame();if(paused)togglePause();clearInterval(timer);
                 assert(COLS===18 && ROWS===18,'mobile 18x18');
                 assert(obstacles.length===obstacleCount() && connectedArena(obstacles),'obstacle density and connectivity');
                 for(let i=0;i<10;i++) {
@@ -484,7 +487,7 @@ class GameTests(unittest.TestCase):
             }''')
             page.set_viewport_size({'width':1366,'height':768})
             self.assertEqual(page.evaluate('[COLS,ROWS]'),[18,18])
-            page.evaluate('startGame();clearInterval(timer)')
+            page.evaluate('startGame();if(paused)togglePause();clearInterval(timer)')
             self.assertEqual(page.evaluate('[COLS,ROWS]'),[30,21])
         finally:
             page.close()
@@ -576,6 +579,7 @@ class GameTests(unittest.TestCase):
         self.assertTrue(self.page.evaluate('musicaAtual.muted'))
         self.page.reload(wait_until='domcontentloaded')
         self.page.locator('#startBtn').click()
+        self.page.evaluate("if(paused)togglePause()")
         self.page.evaluate('clearTimeout(timer)')
         self.page.locator('#pauseBtn').click()
         self.assertEqual(mute.get_attribute('aria-pressed'),'true')
@@ -707,6 +711,7 @@ class GameTests(unittest.TestCase):
         ''')
         self.page.reload(wait_until='domcontentloaded')
         self.page.locator('#startBtn').click()
+        self.page.evaluate("if(paused)togglePause()")
         self.page.evaluate('clearTimeout(timer)')
         self.page.locator('#pauseBtn').click()
         self.assertEqual(self.page.locator('#muteAllBtn').get_attribute('aria-pressed'),'true')
@@ -755,10 +760,10 @@ class GameTests(unittest.TestCase):
           }
           food=cheatFoods[0];collectFood();
           assert(!cheatFoods.length && food && !ids.split(',').includes(String(food.id)),'normal spawning resumes');
-          startGame();clearTimeout(timer);assert(!cheatFoods.length,'restart clears row');
+          startGame();if(paused)togglePause();clearTimeout(timer);assert(!cheatFoods.length,'restart clears row');
         """)
         for difficulty in ['medium','hard']:
-            self.page.evaluate(f"difficulty='{difficulty}';startGame();clearTimeout(timer)")
+            self.page.evaluate(f"difficulty='{difficulty}';startGame();if(paused)togglePause();clearTimeout(timer)")
             self.page.keyboard.type('atreus')
             self.check("assert(!cheatFoods.length,'easy only');")
         self.assertNotIn('atreus',self.page.locator('#howText').inner_text().lower())
@@ -766,7 +771,7 @@ class GameTests(unittest.TestCase):
     def test_secret_row_mobile_and_movement_collect_any_cell(self):
         self.page.set_viewport_size({'width':390,'height':844})
         self.check("""
-          startGame();clearTimeout(timer);obstacles=[];
+          startGame();if(paused)togglePause();clearTimeout(timer);obstacles=[];
           assert(activateBurgerRow() && cheatFoods.length===18,'mobile row');
           const item=cheatFoods[10];
           snake=[wrap({x:item.x-1,y:item.y})];previousSnake=snake.map(p=>({...p}));
@@ -781,6 +786,93 @@ class GameTests(unittest.TestCase):
           assert(!obstacles.some(p=>p.y===cheatFoods[0].y),'rocks cleared from row');
         """)
 
+    def test_classic_difficulty_score_multipliers(self):
+        self.check("""
+          for(const [level,multiplier] of [['easy',1],['medium',2],['hard',3]]) {
+            difficulty=level;gameMode='classic';startGame();clearTimeout(timer);
+            addScore(10);assert(score===10*multiplier,'food points');
+            addScore(50);assert(score===60*multiplier,'bonus points');
+            food={x:0,y:0,type:'normal'};updateStatus();assert(foodHint.textContent.includes('+'+10*multiplier),'hint matches multiplier');
+          }
+          gameMode='battle';startGame();clearTimeout(timer);addScore(10);
+          assert(score===10,'battle points unchanged');
+        """)
+
+    def test_bob_ability_keyboard_cooldown_and_front_food(self):
+        self.check("""
+          gameMode='battle';character='bob';startGame();clearTimeout(timer);obstacles=[];battleEnemies=[];
+          assert(useAbility(),'starts ready');
+          assert(food.type==='super' && same(food,wrap({x:snake[0].x+direction.x,y:snake[0].y+direction.y})),'yellow in front');
+          assert(abilityAnimation.kind==='spatula' && abilityReadyAt===30000,'animation cooldown');
+          assert(!useAbility(),'no reuse during cooldown');
+          gameTime=30000;assert(useAbility(),'ready after thirty seconds');draw();
+          gameTime=60000;food={x:0,y:0,type:'normal'};
+        """)
+        self.page.keyboard.press('c')
+        self.check("assert(food.type==='super' && abilityReadyAt===90000,'keyboard power');")
+
+    def test_patrick_bomb_recharge_excludes_own_blast_kills(self):
+        self.check("""
+          gameMode='battle';character='patrick';startGame();clearTimeout(timer);obstacles=[];
+          assert(useAbility(),'initial ready');const bomb=obstacles[0];
+          assert(bomb.owner==='patrick' && patrickCharge===0 && !useAbility(),'planted and empty');
+          generateObstacles(obstacleCount());assert(obstacles.includes(bomb) && obstacles.length>1,'planted bomb survives arena updates');
+          snake=[wrap({x:bomb.x-1,y:bomb.y})];direction={x:1,y:0};nextDirection=direction;directionQueue=[];
+          battleEnemies=[];tick();assert(!over,'own bomb has no collision');
+          battleEnemies=[{x:0,y:0,hits:2,aggression:1},{x:15,y:10,hits:2,aggression:1}];
+          explodeBomb(bomb);assert(battleKills===2 && patrickCharge===0,'arena blast kills do not recharge');
+          for(let i=0;i<2;i++) {
+            const enemy={x:0,y:0,hits:0,aggression:1};battleEnemies.push(enemy);damageBattleEnemy(enemy,3);
+          }
+          assert(patrickCharge===2,'two other kills recharge');
+          obstacles=[];assert(useAbility(),'ready again');
+        """)
+
+    def test_sandy_battle_exclusive_karate_and_immunity(self):
+        self.assertTrue(self.page.locator('[data-character="sandy"]').is_hidden())
+        self.page.locator('#pauseBtn').click();self.page.locator('#menuBtn').click()
+        self.page.locator('[data-mode="battle"]').click()
+        self.page.locator('[data-character="sandy"]').click()
+        self.page.locator('#startBtn').click()
+        self.check("""
+          clearTimeout(timer);obstacles=[];
+          assert(character==='sandy' && useAbility() && karateArmed,'armed');
+          const enemy={...snake[0],hits:0,aggression:1,stunnedUntil:0,nextMoveAt:99999};battleEnemies=[enemy];
+          updateBattleEnemies();assert(enemy.hits===2 && !karateArmed && enemy.stunnedUntil===gameTime+3000,'contact karate');
+          assert(sandyImmuneUntil===gameTime+3000 && isInvulnerable() && !hasPower('super'),'immunity without turbo');
+          const speed=currentSpeed;refreshSpeed();assert(currentSpeed===speed,'no turbo');
+          draw();gameTime+=3001;assert(!isInvulnerable(),'immunity expires');
+          gameMode='classic';updateCharacterChoices();assert(character==='bob','classic fallback');
+        """)
+
+    def test_first_battle_tutorial_pauses_at_start_and_first_kill_only(self):
+        self.check("""
+          localStorage.removeItem('bobSnakeBattleTutorialSeen');gameMode='battle';startGame();
+          assert(paused && document.getElementById('overlayTitle').textContent.includes('poderes'),'intro pauses');
+          togglePause();clearTimeout(timer);obstacles=[];
+          damageBattleEnemy(battleEnemies[0],3);finishBattleAttack();tick();
+          assert(paused && document.getElementById('overlayTitle').textContent.includes('Primeiro'),'first kill pauses');
+          assert(localStorage.getItem('bobSnakeBattleTutorialSeen')==='true','remember tutorial');
+          startGame();clearTimeout(timer);assert(!paused && !tutorialFirstKillPending,'not repeated');
+        """)
+
+    def test_mobile_starts_paused_and_offers_fullscreen_all_modes(self):
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.check("""
+          for(const mode of ['classic','battle']) for(const level of ['easy','medium','hard']) {
+            gameMode=mode;difficulty=level;startGame();
+            assert(paused && !over && !overlay.classList.contains('hidden'),'mobile initial pause');
+            assert(document.getElementById('pauseFullscreenBtn').getBoundingClientRect().height>0,'fullscreen inside pause');
+          }
+        """)
+        self.page.locator('#pauseFullscreenBtn').click()
+        self.page.wait_for_function('document.fullscreenElement || game.classList.contains("fallback-fullscreen")')
+        self.check("assert(paused,'fullscreen keeps pause');")
+        self.page.locator('#resumeBtn').click()
+        self.check("assert(!paused,'continue starts play');")
+        self.page.locator('#abilityBtn').click()
+        self.check("assert(food.type==='super' && abilityReadyAt>gameTime,'mobile power button');")
+
     def test_power_pickups_and_frost_have_distinct_sound_events(self):
         self.check("""
           const events=[],original=playEffect;playEffect=kind=>events.push(kind);
@@ -789,7 +881,7 @@ class GameTests(unittest.TestCase):
               food={...snake[0],type};collectFood();
             }
             assert(events.join(',')==='collect,ghost,drill,super,magnet,red','pickup signatures');
-            gameMode='battle';startGame();clearTimeout(timer);
+            gameMode='battle';startGame();if(paused)togglePause();clearTimeout(timer);
             releaseFrostBreath();assert(events.at(-1)==='frost','breath sound');
             assert(new Set(['collect','ghost','drill','super','magnet','red','frost'].map(k=>JSON.stringify(effectNotes[k]))).size===7,'distinct sounds');
           } finally {playEffect=original;}
@@ -797,7 +889,7 @@ class GameTests(unittest.TestCase):
 
     def test_battle_kill_record_persists_separately_from_points(self):
         self.check("""
-          gameMode='battle';battleBest=0;startGame();clearTimeout(timer);
+          gameMode='battle';battleBest=0;startGame();if(paused)togglePause();clearTimeout(timer);
           const classicBest=best;
           const enemy=battleEnemies[0];damageBattleEnemy(enemy,3);
           assert(battleKills===1 && battleBest===1,'kill count');
@@ -806,7 +898,7 @@ class GameTests(unittest.TestCase):
           assert(best===classicBest,'points record separate');
           updateStatus();assert(bossStatus.textContent.includes('Abates 1') && bossStatus.textContent.includes('Recorde 1'),'visible in game');
           endGame();assert(document.getElementById('overlayText').textContent.includes('1 Planktons'),'end game result');
-          startGame();clearTimeout(timer);assert(battleKills===0 && battleBest===1,'restart retains record');
+          startGame();if(paused)togglePause();clearTimeout(timer);assert(battleKills===0 && battleBest===1,'restart retains record');
         """)
         self.page.reload(wait_until='domcontentloaded')
         self.page.locator('[data-mode="battle"]').click()
@@ -816,7 +908,7 @@ class GameTests(unittest.TestCase):
         self.page.set_viewport_size({'width':390,'height':844})
         self.check("""
           for(const level of ['easy','medium','hard']) {
-            difficulty=level;startGame();clearTimeout(timer);
+            difficulty=level;startGame();if(paused)togglePause();clearTimeout(timer);
             assert(mobileGameplay && currentSpeed===settings[level].speed*1.3,'initial mobile speed');
             let previous=Infinity;
             for(const phase of [0,1,5,10,100]) {
@@ -830,11 +922,11 @@ class GameTests(unittest.TestCase):
           }
         """)
         self.page.set_viewport_size({'width':1280,'height':900})
-        self.check("difficulty='hard';startGame();clearTimeout(timer);assert(!mobileGameplay && currentSpeed===settings.hard.speed,'desktop unchanged');")
+        self.check("difficulty='hard';startGame();if(paused)togglePause();clearTimeout(timer);assert(!mobileGameplay && currentSpeed===settings.hard.speed,'desktop unchanged');")
 
     def test_battle_bombs_area_damage_rewards_and_classic_exclusion(self):
         self.check("""
-          gameMode='battle';startGame();clearTimeout(timer);
+          gameMode='battle';startGame();if(paused)togglePause();clearTimeout(timer);
           assert(obstacles.some(o=>o.bomb),'battle has bombs');
           snake=[{x:0,y:0}];previousSnake=snake.map(p=>({...p}));
           const make=(x,y,hits=0)=>({x,y,hits,aggression:3,stunnedUntil:0,nextMoveAt:99999});
@@ -847,19 +939,19 @@ class GameTests(unittest.TestCase):
           assert(!over,'player immune to blast');
           assert(bombExplosions.length===1,'explosion animation');draw();
           explodeBomb(bomb);assert(battleEnemies[0].hits===1,'cannot detonate twice');
-          gameMode='classic';startGame();clearTimeout(timer);
+          gameMode='classic';startGame();if(paused)togglePause();clearTimeout(timer);
           assert(!obstacles.some(o=>o.bomb) && !bombExplosions.length,'classic has no bombs');
         """)
 
     def test_bomb_trigger_on_enemy_step_and_player_obstacle_rules(self):
         self.check("""
-          gameMode='battle';startGame();clearTimeout(timer);obstacles=[];
+          gameMode='battle';startGame();if(paused)togglePause();clearTimeout(timer);obstacles=[];
           snake=[{x:8,y:10}];previousSnake=snake.map(p=>({...p}));
           const enemy={x:11,y:10,hits:0,aggression:1,stunnedUntil:0,nextMoveAt:gameTime};
           battleEnemies=[enemy];obstacles=[{x:10,y:10,bomb:true}];
           updateBattleEnemies();assert(enemy.x===10 && enemy.hits===1 && !obstacles.length,'enemy step detonates');
           for(const power of [null,'drill','super']) {
-            startGame();clearTimeout(timer);battleEnemies=[];battlePendingSpawns=0;
+            startGame();if(paused)togglePause();clearTimeout(timer);battleEnemies=[];battlePendingSpawns=0;
             snake=[{x:8,y:10}];direction={x:1,y:0};nextDirection=direction;directionQueue=[];
             obstacles=[{x:9,y:10,bomb:true}];food={x:0,y:0,type:'normal'};
             if(power) powers[power]=gameTime+10000;
@@ -870,7 +962,7 @@ class GameTests(unittest.TestCase):
 
     def test_frost_cone_damage_freeze_wrap_and_shrink(self):
         self.check("""
-          gameMode='battle';startGame();clearInterval(timer);obstacles=[];
+          gameMode='battle';startGame();if(paused)togglePause();clearInterval(timer);obstacles=[];
           snake=Array.from({length:14},(_,i)=>({x:2,y:10+i%8}));
           previousSnake=snake.map(p=>({...p}));
           const make=(x,y)=>({x,y,hits:0,aggression:1,stunnedUntil:0,nextMoveAt:99999});
@@ -891,7 +983,7 @@ class GameTests(unittest.TestCase):
 
     def test_battle_ice_kills_rewards_and_individual_health(self):
         self.check("""
-          gameMode='battle';startGame();clearInterval(timer);obstacles=[];
+          gameMode='battle';startGame();if(paused)togglePause();clearInterval(timer);obstacles=[];
           snake=[{x:2,y:10}];
           battleEnemies=[{x:4,y:10,hits:1,aggression:3,stunnedUntil:0},
                          {x:6,y:10,hits:2,aggression:3,stunnedUntil:0}];
@@ -902,7 +994,7 @@ class GameTests(unittest.TestCase):
           food={...snake[0],type:'super'};collectFood();
           assert(hasPower('super'),'reward grants original immunity');
           updateStatus();assert(bossHealth.hidden,'global health hidden in battle');draw();
-          gameMode='classic';startGame();clearInterval(timer);
+          gameMode='classic';startGame();if(paused)togglePause();clearInterval(timer);
           battleBurgers=9;food={...snake[0],type:'normal'};collectFood();
           assert(battleBurgers===9 && !frostBreath,'classic has no breath');
         """)
@@ -913,6 +1005,7 @@ class GameTests(unittest.TestCase):
         self.page.locator('[data-mode="battle"]').click()
         self.assertEqual(self.page.locator('[data-mode="battle"]').get_attribute('aria-pressed'),'true')
         self.page.locator('#startBtn').click()
+        self.page.evaluate("if(paused)togglePause()")
         self.check("assert(gameMode==='battle' && battleEnemies.length===1 && COLS===18,'mobile battle start');")
 
     def test_all_five_music_files_decode_in_browser(self):
@@ -927,7 +1020,7 @@ class GameTests(unittest.TestCase):
 
     def test_battle_progression_health_and_laser_target(self):
         self.check("""
-          gameMode='battle';startGame();clearInterval(timer);
+          gameMode='battle';startGame();if(paused)togglePause();clearInterval(timer);
           assert(battleWave===1 && battleEnemies.length===1,'starts with enemy');
           obstacles=[];
           for(let wave=1;wave<=31;wave++) {
@@ -961,7 +1054,7 @@ class GameTests(unittest.TestCase):
     def test_battle_chase_stun_and_music_state(self):
         self.check("""
           for(const level of ['easy','medium','hard']) {
-            difficulty=level;gameMode='classic';startGame();clearInterval(timer);
+            difficulty=level;gameMode='classic';startGame();if(paused)togglePause();clearInterval(timer);
             const prefix=level==='easy'?'easy':'hard';
             assert(selectedMusicKey()===`bgm_${prefix}_explore`,'explore track');
             pendingPlanktons=1;spawnPlankton();updateStatus();
@@ -969,7 +1062,7 @@ class GameTests(unittest.TestCase):
             plankton=null;updateStatus();
             assert(currentMusicKey===`bgm_${prefix}_explore`,'return exploration');
           }
-          gameMode='battle';startGame();clearInterval(timer);obstacles=[];
+          gameMode='battle';startGame();if(paused)togglePause();clearInterval(timer);obstacles=[];
           assert(currentMusicKey==='bgm_battle_mode','battle music');
           const enemy=battleEnemies[0];
           const before=torusDistance(enemy,snake[0]);

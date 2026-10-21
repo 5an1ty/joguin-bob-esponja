@@ -318,6 +318,13 @@ let difficulty = 'easy';
 let gameMode = 'classic';
 let battleWave = 0;
 let battleKills = 0;
+let abilityReadyAt = 0;
+let patrickCharge = 2;
+let karateArmed = false;
+let sandyImmuneUntil = 0;
+let abilityAnimation = null;
+let tutorialFirstKillPending = false;
+let tutorialKillPending = false;
 let battleBurgers = 0;
 let battleRewards = 0;
 let frostBreath = null;
@@ -438,8 +445,11 @@ function refreshSpeed() {
 }
 
 function updateStatus() {
+  updateAbilityButton();
+  document.querySelector('.game-footer span').textContent=`🍔 Hambúrguer = +${10*(gameMode==='classic'?{easy:1,medium:2,hard:3}[difficulty]:1)} pontos`;
   const type = food?.type || 'normal';
-  const hint = food ? `NO MAPA · ${foodDescriptions[type]}` : 'Sem hambúrguer disponível';
+  const description=type==='normal' ? `Normal · +${10*(gameMode==='classic'?{easy:1,medium:2,hard:3}[difficulty]:1)} pontos` : foodDescriptions[type];
+  const hint = food ? `NO MAPA · ${description}` : 'Sem hambúrguer disponível';
   if (foodHint.textContent !== hint) foodHint.textContent = hint;
   foodHint.style.setProperty('--food-color', foodTypes[type].color);
   const active = activePowerTypes().slice(0, MAX_ACTIVE_POWERS);
@@ -550,10 +560,11 @@ function updateBattleEnemies() {
   fillBattleWave();
   for(const enemy of [...battleEnemies]) {
     if(!battleEnemies.includes(enemy)) continue;
-    if(enemy.stunnedUntil>gameTime) continue;
+    if(same(enemy,snake[0]) && character==='sandy' && karateArmed) resolveEnemyContact(enemy);
+    if(!battleEnemies.includes(enemy) || enemy.stunnedUntil>gameTime) continue;
     const underfoot=obstacles.find(o=>o.bomb && same(o,enemy));
     if(underfoot) {explodeBomb(underfoot);if(!battleEnemies.includes(enemy)) continue;}
-    if(same(enemy,snake[0]) && !hasPower('super')) {endGame();return;}
+    if(same(enemy,snake[0]) && !resolveEnemyContact(enemy)) {endGame();return;}
     const from={x:enemy.x,y:enemy.y};
     let moved=false;
     for(let catchup=0;gameTime>=enemy.nextMoveAt && catchup<4;catchup++) {
@@ -567,7 +578,7 @@ function updateBattleEnemies() {
         explodeBomb(bomb);
         if(!battleEnemies.includes(enemy)) break;
       }
-      if(same(enemy,snake[0]) && !hasPower('super')) {endGame();return;}
+      if(same(enemy,snake[0]) && !resolveEnemyContact(enemy)) {endGame();return;}
     }
     if(moved) enemy.motion={from,startedAt:performance.now(),duration:Math.min(currentSpeed,enemyInterval(enemy))};
   }
@@ -577,14 +588,74 @@ function explodeBomb(bomb) {
   if(gameMode!=='battle' || !obstacles.includes(bomb) || !bomb.bomb) return;
   obstacles=obstacles.filter(o=>o!==bomb);sceneCacheKey='';
   bombExplosions=bombExplosions.filter(effect=>effect.until>gameTime);
-  bombExplosions.push({x:bomb.x,y:bomb.y,startedAt:gameTime,until:gameTime+700});
-  playEffect('laser');
+  bombExplosions.push({x:bomb.x,y:bomb.y,startedAt:gameTime,until:gameTime+700,arena:bomb.owner==='patrick'});
+  playEffect(bomb.owner==='patrick'?'patrickPower':'laser');
   const victims=battleEnemies.filter(enemy=> {
     const vector=frostVector(bomb,enemy);
-    return Math.hypot(vector.x,vector.y)<=15;
+    return bomb.owner==='patrick' || Math.hypot(vector.x,vector.y)<=15;
   });
-  victims.forEach(enemy=>damageBattleEnemy(enemy,1,0));
+  victims.forEach(enemy=>damageBattleEnemy(enemy,1,0,bomb.owner==='patrick'?'patrick':'normal'));
   finishBattleAttack();
+}
+
+function isInvulnerable() {return hasPower('super') || (gameMode==='battle' && sandyImmuneUntil>gameTime);}
+function resolveEnemyContact(enemy) {
+  if(character==='sandy' && karateArmed && battleEnemies.includes(enemy)) {
+    karateArmed=false;sandyImmuneUntil=gameTime+3000;
+    abilityAnimation={kind:'karate',from:{...snake[0]},startedAt:gameTime,until:gameTime+600};
+    playEffect('karate');damageBattleEnemy(enemy,2);finishBattleAttack();return true;
+  }
+  return isInvulnerable();
+}
+function updateAbilityButton() {
+  const button=document.getElementById('abilityBtn');
+  button.hidden=gameMode!=='battle';
+  let status='Pronto';
+  if(character==='bob' && abilityReadyAt>gameTime) status=`${Math.ceil((abilityReadyAt-gameTime)/1000)}s`;
+  if(character==='patrick' && patrickCharge<2) status=`${patrickCharge}/2 abates`;
+  if(character==='sandy' && karateArmed) status='Karate armado';
+  button.textContent=`Power · ${status}`;
+  button.setAttribute('aria-label',`Poder de ${character}: ${status}. Tecla C`);
+  button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<2) || (character==='sandy' && karateArmed);
+}
+function useAbility() {
+  if(gameMode!=='battle' || paused || over || !menu.classList.contains('hidden')) return false;
+  const head=snake[0];
+  if(character==='bob') {
+    if(gameTime<abilityReadyAt || cheatFoods.length) return false;
+    const front=wrap({x:head.x+direction.x,y:head.y+direction.y});
+    if(obstacles.some(o=>same(o,front)) || snake.some(p=>same(p,front)) || activeEnemies().some(e=>same(e,front))) return false;
+    food={...front,type:'super',id:++foodSerial};previousFood=null;
+    abilityReadyAt=gameTime+30000;
+    abilityAnimation={kind:'spatula',from:{...head},startedAt:gameTime,until:gameTime+700};
+    playEffect('spatula');
+  } else if(character==='patrick') {
+    if(patrickCharge<2 || obstacles.some(o=>same(o,head))) return false;
+    obstacles.push({...head,bomb:true,owner:'patrick'});sceneCacheKey='';patrickCharge=0;playEffect('plantBomb');
+  } else {
+    if(karateArmed) return false;
+    karateArmed=true;playEffect('karateReady');
+  }
+  updateStatus();return true;
+}
+function showBattleTutorial(stage) {
+  if(!paused) togglePause();
+  document.getElementById('overlayTitle').textContent=stage==='intro'?'Batalha: poderes e bombas':'Primeiro Plankton derrotado!';
+  document.getElementById('overlayText').textContent=stage==='intro'
+    ? ({bob:'C ou Power: gire a espátula e crie um hambúrguer amarelo à frente. Recarga: 30s.',patrick:'C ou Power: plante uma bomba que atinge toda a arena. Você pode pisar nela. Recarga: 2 abates que não sejam dessa bomba.',sandy:'C ou Power: arme o karate. O próximo contato causa 2 de dano, paralisa o Plankton e dá 3s de imunidade.'})[character]+' Bombas comuns explodem quando Plankton pisa. A cada 10 hambúrgueres, você solta um sopro congelante.'
+    : 'Cada Plankton tem 3 de vida. Ao derrotar todos, começa outra onda: primeiro duelos mais agressivos, depois grupos crescentes até 10 inimigos. As cores verde, laranja e vermelho indicam a agressividade. Hambúrgueres vermelhos disparam raios; derrotar um Plankton vermelho dá um hambúrguer amarelo.';
+  if(stage==='wave') {tutorialKillPending=false;localStorage.setItem('bobSnakeBattleTutorialSeen','true');}
+  updateAbilityButton();
+}
+function updateCharacterChoices() {
+  if(gameMode!=='battle' && character==='sandy') character='bob';
+  document.querySelectorAll('[data-character]').forEach(button=>{
+    button.hidden=button.dataset.character==='sandy' && gameMode!=='battle';
+    const selected=button.dataset.character===character;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));
+    button.querySelector('small').textContent=gameMode==='battle'
+      ? ({bob:'Espátula: hambúrguer amarelo · recarga 30s',patrick:'Bomba na arena inteira · recarga 2 abates',sandy:'Karate: dano 2 + paralisia + imunidade 3s'})[button.dataset.character]
+      : ({bob:'O otimista da Fenda',patrick:'O amigo estrela-do-mar'})[button.dataset.character] || '';
+  });
 }
 
 function laserTarget() {
@@ -611,6 +682,7 @@ function spawnPlankton() {
 
 function addScore(amount) {
   const previous = score;
+  amount *= gameMode==='classic' ? ({easy:1,medium:2,hard:3}[difficulty]) : 1;
   score += amount;
   scoreEl.textContent = score;
   if (gameMode==='classic' && score > best) {
@@ -628,7 +700,7 @@ function addScore(amount) {
   refreshSpeed();
 }
 
-function damageBattleEnemy(enemy,damage,stun=3000) {
+function damageBattleEnemy(enemy,damage,stun=3000,source='normal') {
   if(!battleEnemies.includes(enemy)) return;
   enemy.hits=Math.min(3,enemy.hits+damage);
   if(stun) {
@@ -638,6 +710,8 @@ function damageBattleEnemy(enemy,damage,stun=3000) {
   if(enemy.hits>=3) {
     battleEnemies=battleEnemies.filter(e=>e!==enemy);
     battleKills++;
+    if(source!=='patrick') patrickCharge=Math.min(2,patrickCharge+1);
+    if(tutorialFirstKillPending) {tutorialFirstKillPending=false;tutorialKillPending=true;}
     if(battleKills>battleBest) {
       battleBest=battleKills;localStorage.setItem('bobSnakeBattleBest',battleBest);updateBestDisplay();
     }
@@ -811,6 +885,11 @@ function pararMusica() {
 // Efeitos sintetizados originais: cada poder tem sua própria assinatura sonora.
 const effectNotes = {
   collect:[{type:'sine',from:620,to:930,time:.09,at:0},{type:'sine',from:960,to:1320,time:.1,at:.055}],
+  spatula:[{type:'triangle',from:300,to:1400,time:.2,at:0},{type:'sine',from:1200,to:1800,time:.12,at:.16}],
+  plantBomb:[{type:'sine',from:180,to:60,time:.18,at:0}],
+  patrickPower:[{type:'noise',from:1,to:.2,time:.5,at:0},{type:'triangle',from:100,to:35,time:.45,at:0}],
+  karateReady:[{type:'triangle',from:440,to:880,time:.15,at:0}],
+  karate:[{type:'noise',from:1,to:.5,time:.13,at:0},{type:'square',from:240,to:80,time:.13,at:.02}],
   ghost:[{type:'sine',from:900,to:270,time:.28,at:0},{type:'sine',from:1350,to:405,time:.28,at:.06}],
   drill:[{type:'square',from:180,to:95,time:.08,at:0},{type:'square',from:210,to:110,time:.08,at:.09},{type:'triangle',from:260,to:140,time:.1,at:.18}],
   super:[{type:'triangle',from:440,to:880,time:.13,at:0},{type:'triangle',from:660,to:1320,time:.13,at:.1},{type:'sine',from:880,to:1760,time:.18,at:.2}],
@@ -914,6 +993,7 @@ updateBestDisplay();
 
 document.querySelectorAll('.character').forEach(btn => {
   btn.addEventListener('click', () => {
+    if(btn.hidden) return;
     character = btn.dataset.character;
 
     document.querySelectorAll('.character').forEach(b => {
@@ -949,6 +1029,7 @@ document.querySelectorAll('.difficulty').forEach(btn => {
 document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
   gameMode=button.dataset.mode;
   updateBestDisplay();
+  updateCharacterChoices();
   document.querySelectorAll('[data-mode]').forEach(item=>{
     const selected=item===button;item.classList.toggle('selected',selected);item.setAttribute('aria-pressed',String(selected));
   });
@@ -1003,6 +1084,10 @@ function startGame() {
   battleEnemies = [];
   battleWave = 0;
   battleKills = 0;
+  abilityReadyAt = 0;patrickCharge = 2;karateArmed = false;sandyImmuneUntil = 0;abilityAnimation = null;
+  tutorialFirstKillPending = gameMode==='battle' && localStorage.getItem('bobSnakeBattleTutorialSeen')!=='true';
+  tutorialKillPending = false;
+  if(gameMode!=='battle' && character==='sandy') character='bob';
   battleBurgers = 0;
   battleRewards = 0;
   frostBreath = null;
@@ -1051,9 +1136,7 @@ function startGame() {
   scoreEl.textContent = score;
 
   document.getElementById('playingAs').textContent =
-    character === 'bob'
-      ? '🧽 Bob Esponja'
-      : '⭐ Patrick';
+    ({bob:'🧽 Bob Esponja',patrick:'⭐ Patrick',sandy:'🐿️ Sandy Bochechas'})[character];
 
   document.getElementById('level').textContent =
     settings[difficulty].label;
@@ -1074,6 +1157,10 @@ function startGame() {
   tocarMusica();
 
   scheduleTick();
+  if(mobileGameplay || tutorialFirstKillPending) {
+    togglePause();
+    if(tutorialFirstKillPending) showBattleTutorial('intro');
+  }
 }
 
 // =====================================
@@ -1087,7 +1174,7 @@ function same(a, b) {
 // Gera obstáculos sem ocupar a cobra, a comida, o Plankton
 // ou o espaço logo à frente dela, inclusive ao atravessar as bordas.
 function generateObstacles(count) {
-  const generated = [];
+  const generated = obstacles.filter(o=>o.owner==='patrick');
   const head = snake[0];
   const safeAheadDistance = 8;
   let tries = 0;
@@ -1152,7 +1239,7 @@ function generateObstacles(count) {
   }
 
   if(gameMode==='battle') generated.forEach((obstacle,index)=>{
-    if(index%5===0) obstacle.bomb=true;
+    if(index%5===0 || obstacle.owner==='patrick') obstacle.bomb=true;
   });
   obstacles = generated;
 }
@@ -1170,7 +1257,7 @@ const torusDistance = (a,b) => {
 
 // Não permite ilhas ou becos sem saída criados pelas pedras.
 function connectedArena(rocks) {
-  const blocked = new Set(rocks.map(cellKey));
+  const blocked = new Set(rocks.filter(o=>!(character==='patrick' && o.owner==='patrick')).map(cellKey));
   const seen = new Set([cellKey(snake[0])]);
   const queue = [snake[0]];
   for (let i = 0; i < queue.length; i++) {
@@ -1182,7 +1269,7 @@ function connectedArena(rocks) {
       seen.add(cellKey(p)); queue.push(p);
     }
   }
-  return seen.size === COLS * ROWS - rocks.length;
+  return seen.size === COLS * ROWS - blocked.size;
 }
 
 function placeFood() {
@@ -1251,11 +1338,11 @@ function tick(stepAt = performance.now()) {
   const eatenFood=foods.find(item=>same(head,item)) || foods.find(item=>same(snake[0],item));
   const eating=!!eatenFood;
   if(eatenFood) food=eatenFood;
-  const hitObstacle = obstacles.some(o => same(o,head));
+  const hitObstacle = obstacles.some(o => same(o,head) && !(character==='patrick' && o.owner==='patrick'));
   const body = eating ? snake : snake.slice(0,-1);
   const hitSelf = body.some(s=>same(s,head));
-  if ((hitObstacle && !hasPower('drill') && !hasPower('super')) ||
-      (hitSelf && !hasPower('ghost') && !hasPower('super'))) {
+  if ((hitObstacle && !hasPower('drill') && !isInvulnerable()) ||
+      (hitSelf && !hasPower('ghost') && !isInvulnerable())) {
     endGame(); return;
   }
   snake.unshift(head);
@@ -1266,6 +1353,7 @@ function tick(stepAt = performance.now()) {
   updatePlankton();
   motionDuration = currentSpeed;
   updateStatus();
+  if(tutorialKillPending && !over) showBattleTutorial('wave');
 }
 
 // =====================================
@@ -1342,6 +1430,8 @@ function setDirection(dir) {
 // =====================================
 
 document.addEventListener('keydown', e => {
+  if(e.key.toLowerCase()==='c' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {e.preventDefault();useAbility();}
+
   if(!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if(difficulty==='easy' && !paused && !over && menu.classList.contains('hidden') && e.key.length===1) {
       cheatInput=(cheatInput+e.key.toLowerCase()).slice(-6);
@@ -1493,6 +1583,7 @@ function togglePause() {
 
   document.getElementById('pauseBtn').textContent =
     paused ? '▶' : 'II';
+  updateAbilityButton();
 }
 // =====================================
 // FIM DE JOGO
@@ -1717,7 +1808,7 @@ function drawStaticScene() {
 
 function paintSnakeSprite(x,y,index) {
   const scaleX=canvas.width/BOARD_WIDTH,scaleY=canvas.height/BOARD_HEIGHT;
-  const key=`${character}:${index===0}:${hasPower('ghost')}:${hasPower('drill')}:${hasPower('super')}:${scaleX}:${scaleY}`;
+  const key=`${character}:${index===0}:${hasPower('ghost')}:${hasPower('drill')}:${hasPower('super')}:${karateArmed}:${sandyImmuneUntil>gameTime}:${scaleX}:${scaleY}`;
   const padding=8,size=CELL+padding*2;
   let sprite=spriteCache.get(key);
   if(!sprite) {
@@ -1758,12 +1849,13 @@ function draw(alpha = movementProgress(), now = performance.now()) {
 
   // Hambúrguer
   for(const item of mapFoods()) {
-    const from = previousFood?.id === item.id ? previousFood : item;
+    const from = previousFood && previousFood.id === item.id ? previousFood : item;
     paintWrapped(interpolateCell(from, item, alpha), (x,y) => {
       ctx.save(); drawFood(x,y,item); ctx.restore();
     });
   }
 
+  drawAbilityAnimation(alpha);
   drawBombExplosions(alpha);
   drawFrostBreath(alpha);
   drawPlankton(now);
@@ -1926,6 +2018,19 @@ function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
   ctx.restore();
 }
 
+function drawAbilityAnimation(alpha) {
+  if(!abilityAnimation || abilityAnimation.until<=gameTime) return;
+  const progress=Math.min(1,(gameTime+(!paused?alpha*motionDuration:0)-abilityAnimation.startedAt)/(abilityAnimation.until-abilityAnimation.startedAt));
+  paintWrapped(abilityAnimation.from,(x,y)=>{
+    ctx.save();ctx.translate(x+10,y+10);ctx.globalAlpha=1-progress;
+    if(abilityAnimation.kind==='spatula') {
+      ctx.rotate(progress*Math.PI*6);ctx.fillStyle='#a4cddd';ctx.fillRect(0,-1,20,3);ctx.fillStyle='#e8f5fc';ctx.fillRect(16,-5,9,11);
+      ctx.strokeStyle='#52788d';for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(18+i*2,-3);ctx.lineTo(18+i*2,4);ctx.stroke();}
+    } else {ctx.strokeStyle='#fff5b3';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,8+progress*18,-1,1);ctx.stroke();}
+    ctx.restore();
+  });
+}
+
 function drawBomb(x,y) {
   ctx.save();ctx.translate(x,y);
   ctx.fillStyle='#17283b';ctx.strokeStyle='#ffab55';ctx.lineWidth=1.5;
@@ -1941,7 +2046,7 @@ function drawBombExplosions(alpha) {
   for(const effect of bombExplosions) {
     const age=gameTime+(!paused && !over?alpha*motionDuration:0)-effect.startedAt;
     const progress=Math.max(0,Math.min(1,age/700));
-    const radius=Math.max(1,15*CELL*progress);
+    const radius=Math.max(1,(effect.arena?Math.hypot(COLS,ROWS):15)*CELL*progress);
     for(const dx of [-BOARD_WIDTH,0,BOARD_WIDTH]) for(const dy of [-BOARD_HEIGHT,0,BOARD_HEIGHT]) {
       ctx.save();ctx.globalAlpha=(1-progress)*.35;
       ctx.strokeStyle='#ffbd58';ctx.fillStyle='rgba(255,117,41,.25)';ctx.lineWidth=3;
@@ -2061,6 +2166,16 @@ function drawSnake(x, y, i) {
       ctx.arc(x + 7, y + 6, 1.2, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if(character==='sandy') {
+    ctx.fillStyle=head?'#c88a49':'#e4e5db';roundRect(x+2,y+2,16,16,5);ctx.fill();
+    if(head) {
+      ctx.strokeStyle='#b6f3ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x+10,y+10,9,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='#fff';ctx.fillRect(x+5,y+6,4,5);ctx.fillRect(x+11,y+6,4,5);
+      ctx.fillStyle='#182c43';ctx.fillRect(x+7,y+8,2,2);ctx.fillRect(x+11,y+8,2,2);
+      ctx.fillStyle='#fff';ctx.fillRect(x+8,y+13,5,4);
+      ctx.fillStyle='#f184c5';ctx.beginPath();ctx.arc(x+17,y+2,3,0,Math.PI*2);ctx.fill();
+      if(karateArmed || sandyImmuneUntil>gameTime) {ctx.strokeStyle='#fff19c';ctx.lineWidth=2;ctx.strokeRect(x,y,20,20);}
+    }
   } else {
     // Corpo rosa do Patrick
     ctx.fillStyle = head ? '#b64d70' : '#e97591';
@@ -2128,3 +2243,8 @@ const canvasObserver = new ResizeObserver(syncCanvasResolution);
 canvasObserver.observe(canvas);
 resizeBoardForViewport();
 syncCanvasResolution();
+const pauseFullscreenBtn=document.getElementById('pauseFullscreenBtn');
+pauseFullscreenBtn.addEventListener('click',()=>fullscreenBtn.click());
+document.getElementById('abilityBtn').addEventListener('pointerdown',event=>{event.preventDefault();useAbility();});
+document.getElementById('abilityBtn').addEventListener('click',event=>{if(event.detail===0)useAbility();});
+updateCharacterChoices();

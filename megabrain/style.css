@@ -230,3 +230,13 @@ footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18
 .mode-choice{display:grid;gap:5px;padding:12px 10px;border:2px solid #d8dbc7;border-radius:13px;background:#fff;color:#082d4b;cursor:pointer;text-align:left}
 .mode-choice.selected{border-color:#0b9d94;background:#ddfff4;box-shadow:0 0 0 2px #0b9d9420}
 .mode-choice small{font-size:11px;line-height:1.4}
+
+.character[hidden],#abilityBtn[hidden]{display:none!important}
+#abilityBtn{touch-action:none;user-select:none;min-height:44px;margin:8px auto;display:block}
+#game:is(:fullscreen,.fallback-fullscreen) #abilityBtn{position:fixed;right:8px;bottom:max(20px,env(safe-area-inset-bottom));z-index:4;width:95px;font-size:11px;padding:8px}
+
+.overlay{grid-template-rows:minmax(0,1fr)}
+.overlay-card{max-height:100%;min-height:0;overflow-y:auto;padding:12px}
+
+.pause-start-actions{display:flex;gap:8px;margin:8px 0}.pause-start-actions button{margin:0;min-height:44px;font-size:12px;padding:8px}
+@media(max-width:900px){.overlay-icon{font-size:24px}.overlay h2{font-size:19px}}

@@ -16,3 +16,30 @@ body:after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;back
 .character-stage>img{height:calc(100% - 44px);max-height:330px;top:0}.hero-caption{bottom:0}
 @media(max-width:650px){.character-stage>img{height:calc(100% - 32px);top:0}.hero-caption{bottom:-5px}}
 @media(max-width:650px){.intro h2 br{display:block}.intro h2{font-size:34px}.hero-copy{width:100%}.orbit-two{width:14px;height:14px;box-shadow:0 0 0 4px #ffffff30}footer{color:#c9f4ff}}
+
+/* Controles de aventura: cores próprias e seleção com contraste e marca visual. */
+#menu .mode-choice{position:relative;min-height:88px;padding:15px 34px 14px 14px;border-width:2px;border-color:#78b7d1;background:linear-gradient(145deg,#fff,#e9f8ff);box-shadow:0 5px 0 #8ebdce,0 7px 12px #13577914;transition:transform .15s,box-shadow .15s}
+#menu .mode-choice strong{font-size:16px;color:#07496f}
+#menu .mode-choice small{font-size:11px;line-height:1.45;color:#315d73}
+#menu .mode-choice.selected{border-color:#087eac;background:linear-gradient(145deg,#d2f6ff,#9ce4f5);box-shadow:0 5px 0 #08688c,0 0 0 3px #24b6dc26}
+#menu .mode-choice.selected:after{content:'✓';position:absolute;right:10px;top:11px;display:grid;place-items:center;width:21px;height:21px;border-radius:50%;background:#08769c;color:#fff;font-size:13px;font-weight:900}
+#menu .difficulty{min-height:105px;padding:13px 6px 12px;border-width:2px;transition:transform .15s,box-shadow .15s}
+#menu .difficulty[data-difficulty=easy]{border-color:#63b697;background:linear-gradient(#f5fff9,#def7e9);box-shadow:0 5px 0 #66a58c}
+#menu .difficulty[data-difficulty=medium]{border-color:#d2a832;background:linear-gradient(#fffdf0,#fff0b1);box-shadow:0 5px 0 #c3a044}
+#menu .difficulty[data-difficulty=hard]{border-color:#da9086;background:linear-gradient(#fff7f5,#ffe0dc);box-shadow:0 5px 0 #c27e77}
+#menu .difficulty strong{font-size:14px;color:#123d54}
+#menu .difficulty small{font-size:10px;line-height:1.4;color:#35586b}
+#menu .difficulty>span{width:32px;height:32px;font-size:25px}
+.difficulty-icon{display:block;width:30px;height:30px}
+#menu .difficulty.selected{transform:translateY(-3px)}
+#menu .difficulty[data-difficulty=easy].selected{border-color:#14845c;background:linear-gradient(#dcffeb,#b6edcd);box-shadow:0 6px 0 #176d50,0 0 0 3px #2baa7526}
+#menu .difficulty[data-difficulty=medium].selected{border-color:#a67100;background:linear-gradient(#fff6bc,#ffe376);box-shadow:0 6px 0 #916209,0 0 0 3px #edbf302e}
+#menu .difficulty[data-difficulty=hard].selected{border-color:#b4423a;background:linear-gradient(#ffe5df,#ffb6ab);box-shadow:0 6px 0 #963c37,0 0 0 3px #df776d2e}
+#menu .difficulty i{right:6px;top:6px;width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:#075b70;color:white;font-size:12px}
+#menu .difficulty[data-difficulty=easy] i{background:#147a55}
+#menu .difficulty[data-difficulty=medium] i{background:#8a5d00}
+#menu .difficulty[data-difficulty=hard] i{background:#a13c34}
+#menu .difficulty.tutorial-entry{min-height:52px}
+@media(hover:hover){#menu .mode-choice:hover,#menu .difficulty:hover{transform:translateY(-3px)}#menu .difficulty.selected:hover{transform:translateY(-5px)}}
+#menu .mode-choice:active,#menu .difficulty:active{transform:translateY(2px)}
+@media(max-width:650px){#menu .mode-choice{padding-left:10px;padding-right:28px;min-height:96px}#menu .mode-choice strong{font-size:15px}#menu .mode-choice small{font-size:10px}#menu .difficulty strong{font-size:13px}#menu .difficulty small{font-size:9px}}

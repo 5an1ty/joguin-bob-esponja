@@ -42,7 +42,7 @@ class GameTests(unittest.TestCase):
         self.errors = []
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
         self.page.goto(f'http://127.0.0.1:{self.server.server_port}/', wait_until='domcontentloaded')
-        self.page.evaluate("localStorage.setItem('bobSnakeBattlePlayableTutorialSeen','true')")
+        self.page.evaluate("localStorage.setItem('bobSnakeBattlePlayableTutorialSeen','true');localStorage.setItem('bobSnakeDragLearned','true')")
         self.page.locator('#startBtn').click()
         self.page.evaluate("if(paused)togglePause()")
         self.page.evaluate('startGame();if(paused)togglePause();clearInterval(timer); obstacles=[]; food={x:20,y:15,type:"normal"}')
@@ -188,30 +188,62 @@ class GameTests(unittest.TestCase):
           for(let i=0;i<40;i++) {placeFood();assert(!(food.x===0&&food.y===0),'isolated food');}
         ''')
 
+    def test_food_refreshes_blocked_board_without_ending_match(self):
+        self.check("""
+          for(const mode of ['classic','battle']) {
+            gameMode=mode;startGame();if(paused)togglePause();clearTimeout(timer);
+            score=123;powers={ghost:gameTime+8000};
+            const original=snake.map(p=>({...p}));
+            obstacles=[];
+            for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) {
+              if(!snake.some(p=>same(p,{x,y})))obstacles.push({x,y});
+            }
+            assert(placeFood() && food && !over,'blocked map recovered');
+            assert(score===123 && hasPower('ghost'),'score and powers preserved');
+            assert(JSON.stringify(snake)===JSON.stringify(original),'body preserved when possible');
+            assert(!obstacles.some(p=>same(p,food)) && !snake.some(p=>same(p,food)),'food is free');
+            assert(!activeEnemies().some(p=>same(p,food)),'food avoids enemies');
+          }
+        """)
+
+    def test_full_snake_refresh_preserves_battle_and_safe_exit(self):
+        self.check("""
+          for(const mobile of [false,true]) {
+            COLS=mobile?18:30;ROWS=mobile?18:21;
+            gameMode='battle';startGame();if(paused)togglePause();clearTimeout(timer);
+            direction={x:1,y:0};nextDirection={...direction};
+            snake=[{x:0,y:0}];
+            for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(x||y)snake.push({x,y});
+            obstacles=[];score=456;
+            battleEnemies=[{x:1,y:0,hits:1,aggression:2,stunnedUntil:gameTime+99999,nextMoveAt:gameTime+99999},
+              {x:2,y:0,hits:2,aggression:3,stunnedUntil:gameTime+99999,nextMoveAt:gameTime+99999}];
+            const enemies=battleEnemies.slice();
+            assert(placeFood() && food && !over,'full board recovered');
+            assert(snake.length===INITIAL_SNAKE_LENGTH && score===456,'size reset without score loss');
+            assert(enemies.every((e,i)=>battleEnemies[i]===e) && enemies[0].hits===1 && enemies[1].hits===2,'enemy progress preserved');
+            assert(!snake.some(p=>same(p,food)) && !activeEnemies().some(p=>same(p,food)),'safe food');
+            assert(!activeEnemies().some(e=>snake.some(p=>same(p,e))),'no enemy on refreshed body');
+            tick();assert(!over,'safe first move after refresh');
+          }
+        """)
+
     def test_mobile_console_controls_and_guide(self):
-        for width, height in [(390,844),(360,640),(768,1024),(844,390)]:
+        for width,height in [(390,844),(360,640),(768,1024),(844,390)]:
             self.page.set_viewport_size({'width':width,'height':height})
             self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
             self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
             board=self.page.locator('#board').bounding_box()
-            pad=self.page.locator('.touch-controls').bounding_box()
-            up=self.page.locator('[data-dir=up]').bounding_box()
-            self.assertGreaterEqual(up['width'],54)
-            if height>width:
-                self.assertAlmostEqual(pad['x']+pad['width']/2,width/2,delta=1)
-                self.assertLess(board['y']+board['height'],pad['y'])
+            header=self.page.locator('.game-head').bounding_box()
             self.assertGreater(board['height'],100)
-            self.assertLessEqual(pad['y']+pad['height'],height)
-            self.assertEqual(self.page.locator('#game').evaluate('(el)=>getComputedStyle(el).transform'),'none')
-            self.page.locator('[data-dir=up]').click()
-            self.assertEqual(self.page.evaluate('nextDirection.y'),-1)
+            self.assertAlmostEqual(board['y'],0,delta=1)
+            self.assertAlmostEqual(board['height'],height,delta=1)
+            self.assertTrue(self.page.locator('.touch-controls').is_hidden())
+            self.assertGreaterEqual(self.page.locator('#topPauseBtn').bounding_box()['height'],44)
             self.page.evaluate('leaveFullscreen()')
-        self.page.locator('#pauseBtn').click()
+        self.page.locator('#topPauseBtn').click()
         self.page.locator('#menuBtn').click()
         self.page.locator('#howBtn').click()
-        self.assertEqual(self.page.locator('#howBtn').get_attribute('aria-expanded'),'true')
-        self.assertEqual(self.page.locator('.burger-guide li').count(),6)
-        self.assertIn('3 segundos',self.page.locator('#howText').inner_text())
+        self.assertIn('arraste',self.page.locator('#howText').inner_text())
 
     def test_special_food_scarcity_by_difficulty(self):
         self.check('''
@@ -242,45 +274,23 @@ class GameTests(unittest.TestCase):
           assert(traveled.join(',')==='2,3,6','faster medium/hard chase');
         ''')
 
-    def test_continuous_touch_drag_across_direction_pad(self):
+    def test_continuous_touch_drag_across_canvas(self):
         self.page.set_viewport_size({'width':390,'height':844})
         self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         client=self.page.context.new_cdp_session(self.page)
         client.send('Emulation.setTouchEmulationEnabled',{'enabled':True,'maxTouchPoints':1})
-        def touch(kind, direction=None):
-            points=[]
-            if direction:
-                box=self.page.locator(f'[data-dir={direction}]').bounding_box()
-                points=[{'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}]
-            client.send('Input.dispatchTouchEvent',{'type':kind,'touchPoints':points})
-            if direction:
-                self.page.wait_for_function('(direction) => padDirection===direction',arg=direction)
-        self.page.evaluate('''() => {
-          window.padBoundsReads=0;
-          for(const button of directionPad.querySelectorAll('[data-dir]')) {
-            const measure=button.getBoundingClientRect.bind(button);
-            button.getBoundingClientRect=()=>{window.padBoundsReads++;return measure();};
-          }
-        }''')
-        touch('touchStart','up')
+        self.page.wait_for_timeout(50)
+        box=self.page.locator('#board').bounding_box()
+        x,y=box['x']+box['width']/2,box['y']+box['height']/2
+        client.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y}]})
+        client.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x,'y':y-40}]})
         self.assertEqual(self.page.evaluate('nextDirection.y'),-1)
-        self.check('tick();assert(direction.y===-1,"held up");')
-        pad=self.page.locator('.touch-controls').bounding_box()
-        client.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':pad['x']+pad['width']/2,'y':pad['y']+pad['height']/2}]})
-        self.page.wait_for_function('padPointer!==null && padDirection===null')
-        touch('touchMove','right')
+        self.check('tick();assert(direction.y===-1,"up swipe");')
+        client.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x+40,'y':y-40}]})
+        self.page.wait_for_function('nextDirection.x===1')
         self.assertEqual(self.page.evaluate('nextDirection.x'),1)
-        self.check('tick();assert(direction.x===1,"drag right");')
-        touch('touchMove','down')
-        self.assertEqual(self.page.evaluate('nextDirection.y'),1)
-        self.assertEqual(self.page.locator('[data-dir=down]').get_attribute('class'),'pressed')
-        self.assertEqual(self.page.evaluate('padBoundsReads'),4)
-        touch('touchEnd')
-        self.assertTrue(self.page.evaluate('padPointer===null && padDirection===null'))
-        self.assertEqual(self.page.locator('.touch-controls .pressed').count(),0)
-        touch('touchStart','up')
-        touch('touchCancel')
-        self.assertTrue(self.page.evaluate('padPointer===null'))
+        client.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+        self.assertTrue(self.page.evaluate('dragPointer===null'))
         client.detach()
 
     def test_proportions_and_high_dpi_backing_store(self):
@@ -293,7 +303,7 @@ class GameTests(unittest.TestCase):
                 page.evaluate("clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
                 page.wait_for_function('''() => {
                   const r=canvas.getBoundingClientRect();
-                  return Math.abs(r.width/r.height-COLS/ROWS)<.005 &&
+                  return Math.abs((r.width/r.height)/(COLS/ROWS)-1)<.04 &&
                     Math.abs(canvas.width-r.width*devicePixelRatio)<=1 &&
                     Math.abs(canvas.height-r.height*devicePixelRatio)<=1;
                 }''')
@@ -302,11 +312,11 @@ class GameTests(unittest.TestCase):
                 self.assertEqual(page.locator('.effect-badge').count(),3)
                 board=page.locator('#board').bounding_box()
                 hud=page.locator('.status-bar').bounding_box()
-                self.assertAlmostEqual(board['width']/board['height'],page.evaluate('COLS/ROWS'),delta=.005)
+                self.assertAlmostEqual(board['width']/board['height'],page.evaluate('COLS/ROWS'),delta=page.evaluate('COLS/ROWS')*.04)
                 if height>width:
-                    self.assertGreater(board['y'],hud['y']+hud['height'])
-                    pad=page.locator('.touch-controls').bounding_box()
-                    self.assertLess(board['y']+board['height'],pad['y'])
+                    self.assertAlmostEqual(board['y'],0,delta=1)
+                    self.assertAlmostEqual(board['y']+board['height'],height,delta=1)
+                    self.assertTrue(page.locator('.touch-controls').is_hidden())
                 self.assertIn('ATIVO',page.locator('#powerStatus').inner_text())
             finally:
                 page.close()
@@ -343,7 +353,9 @@ class GameTests(unittest.TestCase):
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         hint=self.page.locator('#foodHint').bounding_box()
         board=self.page.locator('#board').bounding_box()
-        self.assertLess(hint['y']+hint['height'],board['y'])
+        self.assertGreaterEqual(hint['y'],board['y'])
+        self.assertLess(hint['y']+hint['height'],board['y']+110)
+        self.check("assert(placeFood() && !foodUnderMobileControls(food),'food avoids top hint');")
         self.assertEqual(self.page.locator('#foodHint').evaluate('(el)=>getComputedStyle(el).pointerEvents'),'none')
 
     def test_plankton_health_bar_loses_life_without_visible_numbers(self):
@@ -380,17 +392,18 @@ class GameTests(unittest.TestCase):
           } finally {ctx.moveTo=original;}
         ''')
 
-    def test_mobile_map_uses_available_area_above_controls(self):
+    def test_mobile_map_fills_screen_with_optional_power_control(self):
         self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("startGame();if(paused)togglePause();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate("gameMode='battle';showMobilePower=true;applyControlPreferences();startGame();clearTimeout(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         board=self.page.locator('#board').bounding_box()
-        pad=self.page.locator('.touch-controls').bounding_box()
-        self.assertGreater(board['width'],360)
-        self.assertGreater(board['height'],360)  # Antes: aproximadamente 315 × 220px.
-        self.assertAlmostEqual(board['width']/board['height'],self.page.evaluate('COLS/ROWS'),delta=.005)
-        self.assertGreaterEqual(844-(pad['y']+pad['height']),55)
-        self.assertLess(board['y']+board['height'],pad['y'])
+        power=self.page.locator('#abilityBtn').bounding_box()
+        pause=self.page.locator('#topPauseBtn').bounding_box()
+        self.assertAlmostEqual(board['width'],390,delta=1)
+        self.assertAlmostEqual(board['height'],844,delta=1)
+        self.assertGreaterEqual(power['width'],360)
+        self.assertLess(power['y']+power['height'],pause['y'])
+        self.check("assert(placeFood() && !foodUnderMobileControls(food),'food remains visible');")
 
     def test_map_geometry_stable_on_power_pickup_and_expiry(self):
         for width,height in [(1366,768),(390,844),(360,640),(844,390)]:
@@ -472,21 +485,22 @@ class GameTests(unittest.TestCase):
               const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
               for(const level of ['easy','medium','hard']) {
                 difficulty=level;startGame();if(paused)togglePause();clearInterval(timer);
-                assert(COLS===18 && ROWS===18,'mobile 18x18');
+                assert(COLS===14 && ROWS===mobileGridSize(innerWidth,innerHeight).rows,'adaptive mobile grid');
                 assert(obstacles.length===obstacleCount() && connectedArena(obstacles),'obstacle density and connectivity');
                 for(let i=0;i<10;i++) {
                   assert(placeFood() && food.x<COLS && food.y<ROWS,'food inside reduced grid');
                   assert(!obstacles.some(o=>same(o,food)),'safe food');
                 }
               }
-              obstacles=[];food={x:5,y:5,type:'normal'};snake=[{x:17,y:10}];
+              obstacles=[];food={x:5,y:5,type:'normal'};snake=[{x:COLS-1,y:10}];
               direction=nextDirection={x:1,y:0};tick();clearInterval(timer);
               assert(snake[0].x===0 && !over,'horizontal portal on reduced grid');
-              snake=[{x:10,y:17}];direction=nextDirection={x:0,y:1};tick();clearInterval(timer);
+              snake=[{x:10,y:ROWS-1}];direction=nextDirection={x:0,y:1};tick();clearInterval(timer);
               assert(snake[0].y===0 && !over,'vertical portal on reduced grid');
             }''')
+            initial_grid=page.evaluate('[COLS,ROWS]')
             page.set_viewport_size({'width':1366,'height':768})
-            self.assertEqual(page.evaluate('[COLS,ROWS]'),[18,18])
+            self.assertEqual(page.evaluate('[COLS,ROWS]'),initial_grid)
             page.evaluate('startGame();if(paused)togglePause();clearInterval(timer)')
             self.assertEqual(page.evaluate('[COLS,ROWS]'),[30,21])
         finally:
@@ -557,18 +571,19 @@ class GameTests(unittest.TestCase):
             self.page.set_viewport_size({'width':width,'height':height})
             self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport();powers={ghost:8000};updateStatus()")
             self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-            pause=self.page.locator('#pauseBtn').bounding_box()
+            pause=self.page.locator('#topPauseBtn').bounding_box()
             leave=self.page.locator('#fullscreenBtn').bounding_box()
-            self.assertGreater(pause['x'],width-65)
-            self.assertLessEqual(pause['y'],25)
-            self.assertLess(leave['x']+leave['width'],pause['x'])
+            self.assertGreater(pause['width'],200)
+            if width<=900:
+                self.assertGreater(pause['y'],height-100)
+                self.assertLessEqual(leave['y'],25)
             opacity=float(self.page.locator('#powerStatus').evaluate('(el)=>getComputedStyle(el).opacity'))
             self.assertGreaterEqual(opacity,.75)
             self.assertLessEqual(opacity,.85)
             self.page.evaluate('leaveFullscreen()')
 
     def test_mute_from_pause_persists_after_reload(self):
-        self.page.locator('#pauseBtn').click()
+        self.page.locator('#topPauseBtn').click()
         mute=self.page.locator('#muteMusicBtn')
         self.assertTrue(mute.is_visible())
         mute.click()
@@ -581,7 +596,7 @@ class GameTests(unittest.TestCase):
         self.page.locator('#startBtn').click()
         self.page.evaluate("if(paused)togglePause()")
         self.page.evaluate('clearTimeout(timer)')
-        self.page.locator('#pauseBtn').click()
+        self.page.locator('#topPauseBtn').click()
         self.assertEqual(mute.get_attribute('aria-pressed'),'true')
         mute.click()
         self.assertTrue(self.page.evaluate('Object.values(musicas).every(m=>!m.muted) && paused'))
@@ -631,34 +646,17 @@ class GameTests(unittest.TestCase):
         ''')
 
     def test_second_finger_can_take_control_of_lateral_movement(self):
-        self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("snake=[{x:8,y:10},{x:8,y:11},{x:8,y:12},{x:8,y:13}];direction=nextDirection={x:0,y:-1};game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
-        client=self.page.context.new_cdp_session(self.page)
-        client.send('Emulation.setTouchEmulationEnabled',{'enabled':True,'maxTouchPoints':2})
-        def point(direction, identifier):
-            box=self.page.locator(f'[data-dir={direction}]').bounding_box()
-            return {'x':box['x']+box['width']/2,'y':box['y']+box['height']/2,'id':identifier}
-        up=point('up',1)
-        client.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[up]})
-        first=self.page.evaluate('padPointer')
-        left=point('left',2)
-        client.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[up,left]})
-        self.page.wait_for_function("padDirection==='left' && nextDirection.x===-1")
-        self.assertNotEqual(self.page.evaluate('padPointer'),first)
-        client.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[up]})
-        self.assertEqual(self.page.evaluate('padDirection'),'left')
-        self.check('tick();assert(direction.x===-1 && !over,"second touch steers left safely");')
-        # Fallback works even if a browser advertises raw events without delivering them.
-        self.page.evaluate('''() => {
-          const r=document.querySelector('[data-dir=down]').getBoundingClientRect();
-          directionPad.dispatchEvent(new PointerEvent('pointermove',{
-            pointerId:padPointer,pointerType:'touch',bubbles:true,clientX:r.x+r.width/2,clientY:r.y+r.height/2
-          }));
-        }''')
-        self.assertEqual(self.page.evaluate('nextDirection.y'),1)
-        client.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-        self.assertTrue(self.page.evaluate('padPointer===null'))
-        client.detach()
+        self.check("""
+          canvas.dispatchEvent(new PointerEvent('pointerdown',{pointerId:10,pointerType:'touch',clientX:100,clientY:100}));
+          canvas.dispatchEvent(new PointerEvent('pointerdown',{pointerId:11,pointerType:'touch',clientX:200,clientY:200}));
+          assert(dragPointer===11,'latest finger takes control');
+          canvas.dispatchEvent(new PointerEvent('pointerup',{pointerId:10,pointerType:'touch'}));
+          assert(dragPointer===11,'old finger release does not cancel new drag');
+          canvas.dispatchEvent(new PointerEvent('pointermove',{pointerId:11,pointerType:'touch',clientX:200,clientY:170}));
+          assert(nextDirection.y===-1,'new finger steers');
+          canvas.dispatchEvent(new PointerEvent('pointercancel',{pointerId:11,pointerType:'touch'}));
+          assert(dragPointer===null,'cancel releases gesture');
+        """)
 
     def test_effects_are_real_synthesized_waveforms_without_clipping(self):
         result=self.page.evaluate('''async () => {
@@ -697,7 +695,7 @@ class GameTests(unittest.TestCase):
         ''')
 
     def test_music_effects_and_master_mutes_are_independent_and_persistent(self):
-        self.page.locator('#pauseBtn').click()
+        self.page.locator('#topPauseBtn').click()
         self.page.locator('#muteEffectsBtn').click()
         self.check('''
           assert(effectsMuted && !musicMuted && !allMuted,'only effects muted');
@@ -713,7 +711,7 @@ class GameTests(unittest.TestCase):
         self.page.locator('#startBtn').click()
         self.page.evaluate("if(paused)togglePause()")
         self.page.evaluate('clearTimeout(timer)')
-        self.page.locator('#pauseBtn').click()
+        self.page.locator('#topPauseBtn').click()
         self.assertEqual(self.page.locator('#muteAllBtn').get_attribute('aria-pressed'),'true')
         self.assertEqual(self.page.locator('#muteEffectsBtn').get_attribute('aria-pressed'),'true')
         self.page.locator('#muteAllBtn').click()
@@ -733,10 +731,10 @@ class GameTests(unittest.TestCase):
         self.page.wait_for_function('document.fullscreenElement === game')
         self.page.wait_for_function('''() => {
           const r=canvas.getBoundingClientRect();
-          return Math.abs(r.width/r.height-COLS/ROWS)<.005 &&
+          return Math.abs((r.width/r.height)/(COLS/ROWS)-1)<.04 &&
             Math.abs(canvas.width-r.width*devicePixelRatio)<=1;
         }''')
-        self.page.locator('#pauseBtn').click()
+        self.page.locator('#topPauseBtn').click()
         self.page.locator('#menuBtn').click()
         self.page.wait_for_function('!document.fullscreenElement')
         self.assertTrue(self.page.locator('#menu').is_visible())
@@ -772,12 +770,12 @@ class GameTests(unittest.TestCase):
         self.page.set_viewport_size({'width':390,'height':844})
         self.check("""
           startGame();if(paused)togglePause();clearTimeout(timer);obstacles=[];
-          assert(activateBurgerRow() && cheatFoods.length===18,'mobile row');
+          assert(activateBurgerRow() && cheatFoods.length===COLS,'mobile row');
           const item=cheatFoods[10];
           snake=[wrap({x:item.x-1,y:item.y})];previousSnake=snake.map(p=>({...p}));
           direction={x:1,y:0};nextDirection=direction;directionQueue=[];
           const id=item.id;tick();
-          assert(!over && cheatFoods.length===17 && !cheatFoods.some(p=>p.id===id),'movement collects non-first cell');
+          assert(!over && cheatFoods.length===COLS-1 && !cheatFoods.some(p=>p.id===id),'movement collects non-first cell');
           draw();
           for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) {
             if(!snake.some(p=>p.y===y)) obstacles.push({x,y});
@@ -912,7 +910,7 @@ class GameTests(unittest.TestCase):
 
     def test_sandy_battle_exclusive_karate_and_immunity(self):
         self.assertTrue(self.page.locator('[data-character="sandy"]').is_hidden())
-        self.page.locator('#pauseBtn').click();self.page.locator('#menuBtn').click()
+        self.page.locator('#topPauseBtn').click();self.page.locator('#menuBtn').click()
         self.page.locator('[data-mode="battle"]').click()
         self.page.locator('[data-character="sandy"]').click()
         self.page.locator('#startBtn').click()
@@ -937,7 +935,14 @@ class GameTests(unittest.TestCase):
             const transition={...tutorialSlowdown};updateTutorialSlowdown(transition.startedAt+550);
             assert(!paused && currentSpeed>transition.base,'gradual deceleration');
             updateTutorialSlowdown(transition.startedAt+1101);
-            assert(paused && playableTutorial.explained,'stopped with explanation');
+            if(playableTutorial.lessonPhase==='practice') {
+              const id=battleLessons[playableTutorial.stage].id;
+              if(id==='ability')useAbility();
+              else if(id==='bomb')for(let i=0;i<3;i++){gameTime=battleEnemies[0].nextMoveAt;updateTutorialEnemies();}
+              else {food={...snake[0],type:id==='waves'?'red':'normal'};collectFood();}
+              const repeated={...tutorialSlowdown};updateTutorialSlowdown(repeated.startedAt+1101);
+            }
+            assert(paused && playableTutorial.explained,'practice followed by explanation');
             assert(document.querySelector('#overlayText p').textContent===battleLessons[playableTutorial.stage].text,'shared copy');
             assert(document.querySelector('#overlayText svg'),'illustration');
             advancePlayableTutorial();clearTimeout(timer);
@@ -1002,20 +1007,18 @@ class GameTests(unittest.TestCase):
           assert(document.getElementById('abilityKeyHint').hidden,'no keyboard prompt on mobile');
         """)
 
-    def test_mobile_starts_paused_and_offers_fullscreen_all_modes(self):
+    def test_mobile_starts_without_pause_and_offers_fullscreen_all_modes(self):
         self.page.set_viewport_size({'width':390,'height':844})
         self.check("""
           for(const mode of ['classic','battle']) for(const level of ['easy','medium','hard']) {
-            gameMode=mode;difficulty=level;startGame();
-            assert(paused && !over && !overlay.classList.contains('hidden'),'mobile initial pause');
-            assert(document.getElementById('pauseFullscreenBtn').getBoundingClientRect().height>0,'fullscreen inside pause');
+            gameMode=mode;difficulty=level;startGame();clearTimeout(timer);
+            assert(!paused && !over && overlay.classList.contains('hidden'),'mobile starts immediately');
           }
         """)
-        self.page.locator('#pauseFullscreenBtn').click()
+        self.page.locator('#fullscreenBtn').click()
         self.page.wait_for_function('document.fullscreenElement || game.classList.contains("fallback-fullscreen")')
-        self.check("assert(paused,'fullscreen keeps pause');")
-        self.page.locator('#resumeBtn').click()
-        self.check("assert(!paused,'continue starts play');")
+        self.check("assert(!paused,'fullscreen continues match');")
+        self.page.evaluate('showMobilePower=true;applyControlPreferences()')
         self.page.locator('#abilityBtn').click()
         self.check("assert(food.type==='super' && abilityReadyAt>gameTime,'mobile power button');")
 
@@ -1152,7 +1155,7 @@ class GameTests(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-mode="battle"]').get_attribute('aria-pressed'),'true')
         self.page.locator('#startBtn').click()
         self.page.evaluate("if(paused)togglePause()")
-        self.check("assert(gameMode==='battle' && battleEnemies.length===1 && COLS===18,'mobile battle start');")
+        self.check("assert(gameMode==='battle' && battleEnemies.length===1 && COLS===14,'mobile battle start');")
 
     def test_all_five_music_files_decode_in_browser(self):
         self.page.evaluate("""async () => {

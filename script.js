@@ -137,7 +137,7 @@ fullscreenBtn.style.cssText = [
   'z-index:20'
 ].join(';');
 
-game.insertBefore(fullscreenBtn, game.firstChild);
+document.querySelector('.game-actions').appendChild(fullscreenBtn);
 
 const fullscreenStyles = document.createElement('style');
 
@@ -226,36 +226,30 @@ function resizeBoardForViewport() {
 // CONTROLE POR GESTOS NO CELULAR
 // =====================================
 
-let swipeStartX = 0;
-let swipeStartY = 0;
-const SWIPE_THRESHOLD = 22;
-
+// Drag contínuo: cada trecho do gesto permite uma nova curva sem levantar o dedo.
+let dragPointer = null;
+let dragAnchor = null;
+const SWIPE_THRESHOLD = 12;
 canvas.addEventListener('pointerdown', event => {
-  if (event.pointerType === 'mouse') return;
-
-  swipeStartX = event.clientX;
-  swipeStartY = event.clientY;
+  if(event.pointerType==='mouse' || paused || over || mobileControlMode!=='swipe') return;
+  event.preventDefault();
+  dragPointer=event.pointerId;dragAnchor={x:event.clientX,y:event.clientY};
+  try{canvas.setPointerCapture(event.pointerId);}catch{}
 });
-
-canvas.addEventListener('pointerup', event => {
-  if (event.pointerType === 'mouse') return;
-
-  const dx = event.clientX - swipeStartX;
-  const dy = event.clientY - swipeStartY;
-
-  if (
-    Math.max(Math.abs(dx), Math.abs(dy)) <
-    SWIPE_THRESHOLD
-  ) {
-    return;
-  }
-
-  if (Math.abs(dx) > Math.abs(dy)) {
-    setDirection(dx > 0 ? 'right' : 'left');
-  } else {
-    setDirection(dy > 0 ? 'down' : 'up');
-  }
+canvas.addEventListener('pointermove', event => {
+  if(event.pointerId!==dragPointer || !dragAnchor || paused || over || mobileControlMode!=='swipe')return;
+  event.preventDefault();
+  const dx=event.clientX-dragAnchor.x,dy=event.clientY-dragAnchor.y;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<SWIPE_THRESHOLD)return;
+  const dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+  if(setDirection(dir))recordMovementGesture(dir);
+  dragAnchor={x:event.clientX,y:event.clientY};
 });
+function clearCanvasDrag(event){if(!event || event.pointerId===dragPointer){dragPointer=null;dragAnchor=null;}}
+canvas.addEventListener('pointerup',clearCanvasDrag);
+canvas.addEventListener('pointercancel',clearCanvasDrag);
+canvas.addEventListener('lostpointercapture',clearCanvasDrag);
+window.addEventListener('blur',()=>clearCanvasDrag());
 
 canvas.addEventListener('contextmenu', event => {
   event.preventDefault();
@@ -302,8 +296,8 @@ let mobileGameplay = false;
 function configureGrid() {
   const mobile = matchMedia(mobileBoardQuery).matches;
   mobileGameplay = mobile;
-  COLS = mobile ? 18 : 30;
-  ROWS = mobile ? 18 : 21;
+  const dimensions=mobile?mobileGridSize(innerWidth,innerHeight):{cols:30,rows:21};
+  COLS=dimensions.cols;ROWS=dimensions.rows;
   BOARD_WIDTH = COLS * CELL;
   BOARD_HEIGHT = ROWS * CELL;
   canvas.style.aspectRatio = `${COLS} / ${ROWS}`;
@@ -447,7 +441,7 @@ function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMov
 function refreshSpeed() {
   if(tutorialSlowdown || playableTutorial?.explained)return;
   const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, gameMode==='battle'?0:scenePhase));
-  const speed = (hasPower('super') ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1);
+  const speed = (hasPower('super') ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1) * movementGuideSpeed();
   if (speed !== currentSpeed) {
     currentSpeed = speed;
     clearInterval(timer);
@@ -638,7 +632,7 @@ function updateAbilityButton() {
   if(character==='sandy') status=`${karateArmed?'Karatê armado · ':''}${sandyUses}/3 usos · Recarga ${sandyRechargeKills}/2 abates`;
   button.textContent=`Power · ${status}${hinted?' · GRÁTIS':''}`;
   button.setAttribute('aria-label',`Poder de ${character}: ${status}. Tecla C`);
-  button.disabled=paused || over || (playableTutorial && (playableTutorial.stage!==1 || tutorialSlowdown || playableTutorial.explained)) || (!hinted && character==='bob' && abilityReadyAt>gameTime) || (!hinted && character==='patrick' && patrickCharge<1) || (character==='sandy' && (karateArmed || (!hinted && sandyUses===0)));
+  button.disabled=paused || over || playableTutorial?.lessonPhase==='demo' || (playableTutorial && (playableTutorial.stage!==1 || tutorialSlowdown || playableTutorial.explained)) || (!hinted && character==='bob' && abilityReadyAt>gameTime) || (!hinted && character==='patrick' && patrickCharge<1) || (character==='sandy' && (karateArmed || (!hinted && sandyUses===0)));
 }
 function useAbility() {
   if(gameMode!=='battle' || paused || over || !menu.classList.contains('hidden')) return false;
@@ -1096,7 +1090,9 @@ document.getElementById('resumeBtn')
   .addEventListener('click',()=>{if(!advancePlayableTutorial())togglePause();});
 
 document.getElementById('restartBtn')
-  .addEventListener('click', startGame);
+  .addEventListener('click', restartImmediately);
+document.getElementById('overlayRestartBtn').addEventListener('click',restartImmediately);
+document.getElementById('topPauseBtn').addEventListener('click',()=>over?restartImmediately():togglePause());
 
 document.getElementById('menuBtn')
   .addEventListener('click', goMenu);
@@ -1106,8 +1102,14 @@ document.getElementById('headerMenuBtn').addEventListener('click',goMenu);
 // INICIAR OU REINICIAR O JOGO
 // =====================================
 
+function restartImmediately() {
+  abortPlayableTutorial();
+  startGame({skipTutorial:true,skipMovementGuide:true});
+}
+
 function startGame(options={}) {
   if(!options.skipTutorial && !playableTutorial && (tutorialSelected || (gameMode==='battle' && localStorage.getItem('bobSnakeBattlePlayableTutorialSeen')!=='true'))) {beginPlayableTutorial();return;}
+  stopMovementGuide();
   stopEffects();
   unlockEffects();
   clearInterval(timer);
@@ -1126,6 +1128,8 @@ function startGame(options={}) {
   pausedProgress = 0;
   directionQueue = [];
   clearPadPointer();
+  clearCanvasDrag();
+  resetMobileInput();
   plankton = null;
   battleEnemies = [];
   battleWave = 0;
@@ -1191,6 +1195,7 @@ function startGame(options={}) {
   overlay.classList.add('hidden');
 
   document.getElementById('pauseBtn').textContent = 'II';
+  syncMobileControls();
 
   previousSnake = snake.map(p => ({...p}));
   previousFood = food && {...food};
@@ -1205,7 +1210,7 @@ function startGame(options={}) {
 
   scheduleTick();
   if(playableTutorial) prepareTutorialLesson(playableTutorial.stage);
-  if(mobileGameplay) togglePause();
+  if(mobileGameplay && !options.skipMovementGuide) beginMovementGuide();
 }
 
 // =====================================
@@ -1318,8 +1323,45 @@ function connectedArena(rocks) {
   return seen.size === COLS * ROWS - blocked.size;
 }
 
+// Recuperação limitada: tenta reorganizar o cenário antes de reduzir a cobra.
 function placeFood() {
   if(cheatFoods.length) {food=cheatFoods[0];return true;}
+  if(tryPlaceSafeFood()) return true;
+  food = null;
+  generateObstacles(obstacleCount());
+  sceneCacheKey = '';
+  if(tryPlaceSafeFood()) return true;
+  // Um cenário livre resolve passagens bloqueadas sem alterar o progresso.
+  obstacles = [];
+  if(tryPlaceSafeFood()) return true;
+
+  // Se o corpo ou os inimigos fecharem todas as saídas, renova a área
+  // imediata da cabeça e mantém os inimigos, suas vidas e a onda atual.
+  const head = {...snake[0]};
+  snake = Array.from({length:INITIAL_SNAKE_LENGTH}, (_,i) =>
+    wrap({x:head.x-direction.x*i, y:head.y-direction.y*i}));
+  const reserved = new Set(snake.map(cellKey));
+  for(let i=1;i<=2;i++) reserved.add(cellKey(wrap({x:head.x+direction.x*i,y:head.y+direction.y*i})));
+  const enemies = activeEnemies();
+  const occupied = new Set(enemies.filter(enemy=>!reserved.has(cellKey(enemy))).map(cellKey));
+  for(const enemy of enemies) {
+    if(!reserved.has(cellKey(enemy))) continue;
+    for(let key=0;key<COLS*ROWS;key++) {
+      if(reserved.has(key) || occupied.has(key)) continue;
+      enemy.x=key%COLS;enemy.y=Math.floor(key/COLS);
+      enemy.motion=null;occupied.add(key);break;
+    }
+  }
+  previousSnake = snake.map(p=>({...p}));
+  previousFood = null;
+  inputMotion = null;
+  planktonMotion = null;
+  directionQueue = [];
+  nextDirection = {...direction};
+  return tryPlaceSafeFood();
+}
+
+function tryPlaceSafeFood() {
   // Cada candidato possui um caminho sem atravessar o corpo e espaço para
   // continuar depois de comer. A simulação inclui o crescimento da cobra.
   const blocked = new Set([...obstacles, ...snake.slice(1), ...activeEnemies()].map(cellKey));
@@ -1350,15 +1392,11 @@ function placeFood() {
       const p = wrap({x:candidate.x+d.x, y:candidate.y+d.y});
       return !occupied.has(cellKey(p));
     });
-    if (escape) {
+    if (escape && !foodUnderMobileControls(candidate)) {
       food = {...candidate, id: ++foodSerial, type: chooseFoodType()};
       return true;
     }
   }
-  food = null;
-  endGame();
-  document.getElementById('overlayTitle').textContent = 'Tabuleiro concluído!';
-  document.getElementById('overlayText').textContent = 'Não há espaço seguro para outro hambúrguer.';
   return false;
 }
 
@@ -1406,6 +1444,7 @@ function tick(stepAt = performance.now()) {
 // =====================================
 
 function setDirection(dir) {
+  if(playableTutorial?.lessonPhase==='demo')return;
   if (
     paused ||
     over ||
@@ -1468,6 +1507,7 @@ function setDirection(dir) {
       startedAt:now, duration:Math.max(1,motionDuration-(now-lastMoveAt))
     };
   }
+  return true;
 }
 
 // =====================================
@@ -1538,7 +1578,7 @@ function steerFromPointer(event) {
   let hit = padHitAreas.find(({rect}) => event.clientX >= rect.left && event.clientX <= rect.right &&
     event.clientY >= rect.top && event.clientY <= rect.bottom);
   if(!hit) {
-    let nearest=101;
+    let nearest=24*24;
     for(const area of padHitAreas) {
       const dx=Math.max(area.rect.left-event.clientX,0,event.clientX-area.rect.right);
       const dy=Math.max(area.rect.top-event.clientY,0,event.clientY-area.rect.bottom);
@@ -1597,11 +1637,14 @@ function togglePause() {
     const elapsed = now-pauseStartedAt;
     lastMoveAt += elapsed;
     if(tutorialSlowdown)tutorialSlowdown.startedAt+=elapsed;
+    if(movementGuide){movementGuide.startedAt+=elapsed;if(movementGuide.finishedAt)movementGuide.finishedAt+=elapsed;}
     if (inputMotion) {inputMotion.startedAt += elapsed;inputMotion.tickAt = lastMoveAt;}
     if (planktonMotion) planktonMotion.startedAt += elapsed;
     for(const enemy of battleEnemies) if(enemy.motion) enemy.motion.startedAt += elapsed;
   }
   clearPadPointer();
+  clearCanvasDrag();
+  resetMobileInput();
   paused = !paused;
   if (!paused) scheduleTick((1-pausedProgress)*currentSpeed);
   document.getElementById('pauseBtn').setAttribute('aria-label',paused ? 'Retomar jogo' : 'Pausar jogo');
@@ -1625,12 +1668,13 @@ function togglePause() {
   document.getElementById('resumeBtn')
     .classList.remove('hidden');
 
-  document.getElementById('restartBtn').textContent =
+  document.getElementById('overlayRestartBtn').textContent =
     'RECOMEÇAR';
 
   document.getElementById('pauseBtn').textContent =
     paused ? '▶' : 'II';
   updateAbilityButton();
+  syncMobileControls();
 }
 // =====================================
 // FIM DE JOGO
@@ -1638,6 +1682,8 @@ function togglePause() {
 
 function endGame() {
   if (over) return;
+  stopMovementGuide();
+  resetMobileInput();
   playEffect('death');
   over = true;
   clearPadPointer();
@@ -1659,12 +1705,13 @@ function endGame() {
   document.getElementById('resumeBtn')
     .classList.add('hidden');
 
-  document.getElementById('restartBtn').textContent =
+  document.getElementById('overlayRestartBtn').textContent =
     'JOGAR NOVAMENTE';
 
   pararMusica();
 
   document.getElementById('pauseBtn').textContent = '↻';
+  syncMobileControls();
 }
 
 // =====================================
@@ -1673,6 +1720,9 @@ function endGame() {
 
 function goMenu() {
   abortPlayableTutorial();
+  stopMovementGuide();
+  clearCanvasDrag();
+  resetMobileInput();
   stopEffects();
   clearPadPointer();
   cancelAnimationFrame(animationFrame);
@@ -1703,6 +1753,7 @@ function syncCanvasResolution() {
 }
 
 function fitFullscreenBoard() {
+  if(isFullscreen() && matchMedia(mobileBoardQuery).matches){mobileGameplay=true;fitMobileFullscreenBoard();return;}
   if (!isFullscreen()) { syncCanvasResolution(); return; }
   const bounds = game.getBoundingClientRect();
   const pad = directionPad.getBoundingClientRect();
@@ -1715,6 +1766,8 @@ function fitFullscreenBoard() {
   const availableWidth = bounds.width - (sidePad ? pad.width+36 : margin*2);
   let bottom = pad.height && !sidePad ? pad.top-bounds.top-18 : bounds.height-18;
   if(gameMode==='battle' && !pad.height) bottom=Math.min(bottom,document.getElementById('abilityBtn').getBoundingClientRect().top-bounds.top-16);
+  if(portable) bottom=Math.min(bottom,bounds.height-(gameMode==='battle'?100:12));
+  else bottom=Math.min(bottom,document.querySelector('.mobile-dock').getBoundingClientRect().top-bounds.top-12);
   const availableHeight = Math.max(80,bottom-top);
   const frame = document.querySelector('.board-wrap');
   const style = getComputedStyle(frame);
@@ -1779,6 +1832,7 @@ function startAnimation() {
     if(game.classList.contains('hidden')) return;
     if (paused && wasPaused) {animationFrame = requestAnimationFrame(render);return;}
     wasPaused = paused;
+    updateMovementGuide(now);
     updateTutorialSlowdown(now);
     const alpha = movementProgress(now);
     draw(alpha,now);

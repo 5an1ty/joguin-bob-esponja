@@ -215,6 +215,7 @@ function resizeBoardForViewport() {
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
   fullscreenBtn.setAttribute('aria-label',active?'Sair da tela cheia':'Entrar em tela cheia');
   fullscreenBtn.title=fullscreenBtn.getAttribute('aria-label');
+  document.getElementById('pauseFullscreenBtn').textContent=active?'⛶ Sair da tela cheia':'⛶ Tela cheia';
   requestAnimationFrame(() => {
     fitFullscreenBoard();
     if (padPointer !== null) measurePadHitAreas();
@@ -328,8 +329,12 @@ let sandyRechargeKills = 0;
 let sandyRechargeUnlocked = false;
 let sandyImmuneUntil = 0;
 let abilityAnimation = null;
-let tutorialFirstKillPending = false;
-let tutorialKillPending = false;
+let playableTutorial = null;
+let tutorialSelected = false;
+let tutorialSlowdown = null;
+let abilityHintKills = 0;
+let abilityHintReady = false;
+let burgerIntroActive = false;
 let battleBurgers = 0;
 let battleRewards = 0;
 let frostBreath = null;
@@ -361,7 +366,7 @@ let cheatInput = '';
 function mapFoods() { return cheatFoods.length ? cheatFoods : (food ? [food] : []); }
 
 function activateBurgerRow() {
-  if(difficulty!=='easy' || paused || over || !menu.classList.contains('hidden') || cheatFoods.length) return false;
+  if(playableTutorial || difficulty!=='easy' || paused || over || !menu.classList.contains('hidden') || cheatFoods.length) return false;
   const occupied=[...snake,...activeEnemies()];
   const rows=Array.from({length:ROWS},(_,y)=>y).filter(y=>!occupied.some(p=>p.y===y));
   if(!rows.length) return false;
@@ -440,6 +445,7 @@ function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMov
 }
 
 function refreshSpeed() {
+  if(tutorialSlowdown || playableTutorial?.explained)return;
   const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, gameMode==='battle'?0:scenePhase));
   const speed = (hasPower('super') ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1);
   if (speed !== currentSpeed) {
@@ -568,6 +574,7 @@ function startBattleWave() {
 }
 
 function updateBattleEnemies() {
+  if(playableTutorial) {updateTutorialEnemies();return;}
   fillBattleWave();
   for(const enemy of [...battleEnemies]) {
     if(!battleEnemies.includes(enemy)) continue;
@@ -607,9 +614,10 @@ function explodeBomb(bomb) {
   });
   victims.forEach(enemy=>damageBattleEnemy(enemy,1,0,bomb.owner==='patrick'?'patrick':'normal'));
   finishBattleAttack();
+  triggerTutorialLesson('bomb');
 }
 
-function isInvulnerable() {return hasPower('super') || (gameMode==='battle' && sandyImmuneUntil>gameTime);}
+function isInvulnerable() {return !!playableTutorial || hasPower('super') || (gameMode==='battle' && sandyImmuneUntil>gameTime);}
 function resolveEnemyContact(enemy) {
   if(character==='sandy' && karateArmed && battleEnemies.includes(enemy)) {
     karateArmed=false;sandyImmuneUntil=gameTime+3000;
@@ -620,62 +628,43 @@ function resolveEnemyContact(enemy) {
 }
 function updateAbilityButton() {
   const button=document.getElementById('abilityBtn');
+  const hinted=gameMode==='battle' && abilityHintReady;
+  button.classList.toggle('ability-hint',hinted && mobileGameplay);
+  document.getElementById('abilityKeyHint').hidden=!hinted || mobileGameplay;
   button.hidden=gameMode!=='battle';
   let status=character==='bob'?'Pronto · Recarga 30s':'Pronto · Recarga 1 abate';
   if(character==='bob' && abilityReadyAt>gameTime) status=`Recarga ${Math.ceil((abilityReadyAt-gameTime)/1000)}s`;
   if(character==='patrick' && patrickCharge<1) status=`Recarga ${patrickCharge}/1 abate`;
   if(character==='sandy') status=`${karateArmed?'Karatê armado · ':''}${sandyUses}/3 usos · Recarga ${sandyRechargeKills}/2 abates`;
-  button.textContent=`Power · ${status}`;
+  button.textContent=`Power · ${status}${hinted?' · GRÁTIS':''}`;
   button.setAttribute('aria-label',`Poder de ${character}: ${status}. Tecla C`);
-  button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<1) || (character==='sandy' && (karateArmed || sandyUses===0));
+  button.disabled=paused || over || (playableTutorial && (playableTutorial.stage!==1 || tutorialSlowdown || playableTutorial.explained)) || (!hinted && character==='bob' && abilityReadyAt>gameTime) || (!hinted && character==='patrick' && patrickCharge<1) || (character==='sandy' && (karateArmed || (!hinted && sandyUses===0)));
 }
 function useAbility() {
   if(gameMode!=='battle' || paused || over || !menu.classList.contains('hidden')) return false;
+  if(playableTutorial && (playableTutorial.stage!==1 || tutorialSlowdown || playableTutorial.explained))return false;
+  const free=abilityHintReady;
   const head=snake[0];
   if(character==='bob') {
-    if(gameTime<abilityReadyAt || cheatFoods.length) return false;
+    if((!free && gameTime<abilityReadyAt) || cheatFoods.length) return false;
     const front=wrap({x:head.x+direction.x,y:head.y+direction.y});
     if(obstacles.some(o=>same(o,front)) || snake.some(p=>same(p,front)) || activeEnemies().some(e=>same(e,front))) return false;
     food={...front,type:'super',id:++foodSerial};previousFood=null;
-    abilityReadyAt=gameTime+30000;
+    if(!free) abilityReadyAt=gameTime+30000;
     abilityAnimation={kind:'spatula',from:{...head},startedAt:gameTime,until:gameTime+700};
     playEffect('spatula');
   } else if(character==='patrick') {
-    if(patrickCharge<1 || obstacles.some(o=>same(o,head))) return false;
-    obstacles.push({...head,bomb:true,owner:'patrick'});sceneCacheKey='';patrickCharge=0;
+    if((!free && patrickCharge<1) || obstacles.some(o=>same(o,head))) return false;
+    obstacles.push({...head,bomb:true,owner:'patrick'});sceneCacheKey='';if(!free)patrickCharge=0;
     abilityAnimation={kind:'star',from:{...head},startedAt:gameTime,until:gameTime+700};
     playEffect('plantBomb');
   } else {
-    if(karateArmed || sandyUses===0) return false;
-    sandyUses--;if(sandyUses===0)sandyRechargeUnlocked=true;karateArmed=true;playEffect('karateReady');
+    if(karateArmed || (!free && sandyUses===0)) return false;
+    if(!free){sandyUses--;if(sandyUses===0)sandyRechargeUnlocked=true;}karateArmed=true;playEffect('karateReady');
   }
+  abilityHintReady=false;abilityHintKills=0;
+  triggerTutorialLesson('ability');
   updateStatus();return true;
-}
-function showBattleTutorial(stage) {
-  if(!paused) togglePause();
-  document.getElementById('overlayTitle').textContent=stage==='intro'?'Tutorial 1: Controles e Habilidades':'Tutorial 2: Como Funcionam as Ondas';
-  const ability={
-    bob:'Espátula: aperte C (PC) ou Power (celular) para girar a espátula e criar um hambúrguer amarelo à frente. Recarga: 30 segundos.',
-    patrick:'Bomba especial: aperte C (PC) ou Power (celular) para plantar uma bomba que atinge toda a arena. Você é imune às explosões e colisões de todas as bombas. Uma estrela gira ao plantar. Começa pronta; recarrega com 1 abate de outras fontes.',
-    sandy:'Ataque de Karatê: aperte C (PC) ou Power (celular). O próximo golpe causa 2 de dano, paralisa o Plankton e te deixa invencível por 3 segundos. Você começa com 2 usos. Depois de gastar os dois, a recarga é liberada: cada 2 abates recuperam 1 uso, acumulando até 3. A luva gira até atingir um Plankton; Sandy fica transparente durante a imunidade.'
-  };
-  const items=stage==='intro' ? [ability[character],
-    'Armadilhas: bombas no chão explodem quando um Plankton pisa nelas.',
-    'Poder Congelante: a cada 10 hambúrgueres coletados, você solta um sopro que congela os inimigos!'
-  ] : [
-    'Inimigos: a cor mostra quem é mais perigoso (Verde, Laranja e Vermelho).',
-    'Hambúrguer vermelho atira raios.',
-    'Derrotar um Plankton vermelho dá um hambúrguer amarelo (imunidade e + velocidade).',
-    'Ondas 1 e 2: todos têm 3 de vida.',
-    'Ondas 3 a 5: Verde tem 4 de vida; Laranja e Vermelho têm 3 de vida.',
-    'Onda 6 em diante: Verde tem 5 de vida; Laranja tem 4 de vida; Vermelho tem 3 de vida.',
-    'Progressão: a cada onda derrotada, vem um novo grupo de inimigos (até 10 por vez).'
-  ];
-  const list=document.createElement('ul');list.className='tutorial-list';
-  for(const text of items) {const item=document.createElement('li');item.textContent=text;list.appendChild(item);}
-  document.getElementById('overlayText').replaceChildren(list);
-  if(stage==='wave') {tutorialKillPending=false;localStorage.setItem('bobSnakeBattleTutorialSeen','true');}
-  updateAbilityButton();
 }
 function updateCharacterChoices() {
   if(gameMode!=='battle' && character==='sandy') character='bob';
@@ -693,6 +682,7 @@ function laserTarget() {
 }
 
 function spawnPlankton() {
+  if(playableTutorial) return;
   if(gameMode==='battle') {fillBattleWave();return;}
   if (plankton || !pendingPlanktons) return;
   const head = snake[0];
@@ -715,7 +705,7 @@ function addScore(amount) {
   amount *= gameMode==='classic' ? ({easy:1,medium:2,hard:3}[difficulty]) : 1;
   score += amount;
   scoreEl.textContent = score;
-  if (gameMode==='classic' && score > best) {
+  if (!playableTutorial && gameMode==='classic' && score > best) {
     best = score; updateBestDisplay();
     localStorage.setItem('bobSnakeBest', best);
   }
@@ -740,13 +730,13 @@ function damageBattleEnemy(enemy,damage,stun=3000,source='normal') {
   if(enemy.hits>=enemyMaxHealth(enemy)) {
     battleEnemies=battleEnemies.filter(e=>e!==enemy);
     battleKills++;
+    if(!playableTutorial && ++abilityHintKills>=2) abilityHintReady=true;
     if(source!=='patrick') patrickCharge=Math.min(1,patrickCharge+1);
     if(character==='sandy' && sandyRechargeUnlocked) {
       if(sandyUses<3 && ++sandyRechargeKills>=2) {sandyUses++;sandyRechargeKills=0;}
       if(sandyUses===3) sandyRechargeKills=0;
     }
-    if(tutorialFirstKillPending) {tutorialFirstKillPending=false;tutorialKillPending=true;}
-    if(battleKills>battleBest) {
+    if(!playableTutorial && battleKills>battleBest) {
       battleBest=battleKills;localStorage.setItem('bobSnakeBattleBest',battleBest);updateBestDisplay();
     }
     if(enemy.aggression===3) battleRewards++;
@@ -755,6 +745,7 @@ function damageBattleEnemy(enemy,damage,stun=3000,source='normal') {
 }
 
 function finishBattleAttack() {
+  if(playableTutorial) return;
   if(!battleEnemies.length && !battlePendingSpawns) startBattleWave();
 }
 
@@ -783,6 +774,7 @@ function releaseFrostBreath() {
 }
 
 function collectFood() {
+  burgerIntroActive=false;
   const type = food.type || 'normal';
   playEffect(type==='normal' ? 'collect' : type);
   if (activeEnemies().length) bossNextFood = type === 'normal' ? 'red' : 'normal';
@@ -806,6 +798,10 @@ function collectFood() {
   }
   if(cheatFoods.length) cheatFoods=cheatFoods.filter(item=>item.id!==food.id);
   addScore(10);
+  if(playableTutorial) {
+    triggerTutorialLesson(type==='red'?'waves':playableTutorial.stage===4?'frost':'food');
+    food={x:COLS-3,y:ROWS-3,type:'normal',id:++foodSerial};return true;
+  }
   return placeFood();
 }
 
@@ -1045,6 +1041,8 @@ document.querySelectorAll('.character').forEach(btn => {
 
 document.querySelectorAll('.difficulty').forEach(btn => {
   btn.addEventListener('click', () => {
+    if(!btn.dataset.difficulty)return;
+    tutorialSelected=false;document.getElementById('tutorialDifficultyBtn').classList.remove('selected');
     difficulty = btn.dataset.difficulty;
 
     document.querySelectorAll('.difficulty').forEach(b => {
@@ -1061,6 +1059,8 @@ document.querySelectorAll('.difficulty').forEach(btn => {
 // =====================================
 
 document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
+  tutorialSelected=false;
+  document.querySelectorAll('.difficulty').forEach(item=>{const selected=item.dataset.difficulty===difficulty;item.classList.toggle('selected',selected);item.setAttribute('aria-pressed',String(selected));});
   gameMode=button.dataset.mode;
   updateBestDisplay();
   updateCharacterChoices();
@@ -1085,7 +1085,7 @@ document.getElementById('pauseBtn')
   .addEventListener('click', togglePause);
 
 document.getElementById('resumeBtn')
-  .addEventListener('click', togglePause);
+  .addEventListener('click',()=>{if(!advancePlayableTutorial())togglePause();});
 
 document.getElementById('restartBtn')
   .addEventListener('click', startGame);
@@ -1098,12 +1098,14 @@ document.getElementById('headerMenuBtn').addEventListener('click',goMenu);
 // INICIAR OU REINICIAR O JOGO
 // =====================================
 
-function startGame() {
+function startGame(options={}) {
+  if(!options.skipTutorial && !playableTutorial && (tutorialSelected || (gameMode==='battle' && localStorage.getItem('bobSnakeBattlePlayableTutorialSeen')!=='true'))) {beginPlayableTutorial();return;}
   stopEffects();
   unlockEffects();
   clearInterval(timer);
   configureGrid();
   game.classList.toggle('battle-mode',gameMode==='battle');
+  game.classList.toggle('tutorial-mode',!!playableTutorial);
 
   menu.classList.add('hidden');
   game.classList.remove('hidden');
@@ -1121,8 +1123,9 @@ function startGame() {
   battleWave = 0;
   battleKills = 0;
   abilityReadyAt = 0;patrickCharge = 1;karateArmed = false;sandyUses = 2;sandyRechargeKills = 0;sandyRechargeUnlocked = false;sandyImmuneUntil = 0;abilityAnimation = null;
-  tutorialFirstKillPending = gameMode==='battle' && localStorage.getItem('bobSnakeBattleTutorialSeen')!=='true';
-  tutorialKillPending = false;
+  abilityHintKills=0;abilityHintReady=false;
+  burgerIntroActive=localStorage.getItem('bobSnakeBurgerIntroSeen')!=='true';
+  localStorage.setItem('bobSnakeBurgerIntroSeen','true');
   if(gameMode!=='battle' && character==='sandy') character='bob';
   battleBurgers = 0;
   battleRewards = 0;
@@ -1193,10 +1196,8 @@ function startGame() {
   tocarMusica();
 
   scheduleTick();
-  if(mobileGameplay || tutorialFirstKillPending) {
-    togglePause();
-    if(tutorialFirstKillPending) showBattleTutorial('intro');
-  }
+  if(playableTutorial) prepareTutorialLesson(playableTutorial.stage);
+  if(mobileGameplay) togglePause();
 }
 
 // =====================================
@@ -1210,6 +1211,7 @@ function same(a, b) {
 // Gera obstáculos sem ocupar a cobra, a comida, o Plankton
 // ou o espaço logo à frente dela, inclusive ao atravessar as bordas.
 function generateObstacles(count) {
+  if(playableTutorial) {obstacles=[];return;}
   const generated = obstacles.filter(o=>o.owner==='patrick');
   const head = snake[0];
   const safeAheadDistance = 8;
@@ -1389,7 +1391,6 @@ function tick(stepAt = performance.now()) {
   updatePlankton();
   motionDuration = currentSpeed;
   updateStatus();
-  if(tutorialKillPending && !over) showBattleTutorial('wave');
 }
 
 // =====================================
@@ -1574,6 +1575,7 @@ window.addEventListener('blur', () => clearPadPointer());
 // =====================================
 
 function togglePause() {
+  if(playableTutorial?.explained && paused && !playableTutorial.advancing)return;
   if (over) return;
 
   const now = performance.now();
@@ -1586,6 +1588,7 @@ function togglePause() {
   } else {
     const elapsed = now-pauseStartedAt;
     lastMoveAt += elapsed;
+    if(tutorialSlowdown)tutorialSlowdown.startedAt+=elapsed;
     if (inputMotion) {inputMotion.startedAt += elapsed;inputMotion.tickAt = lastMoveAt;}
     if (planktonMotion) planktonMotion.startedAt += elapsed;
     for(const enemy of battleEnemies) if(enemy.motion) enemy.motion.startedAt += elapsed;
@@ -1661,6 +1664,7 @@ function endGame() {
 // =====================================
 
 function goMenu() {
+  abortPlayableTutorial();
   stopEffects();
   clearPadPointer();
   cancelAnimationFrame(animationFrame);
@@ -1767,6 +1771,7 @@ function startAnimation() {
     if(game.classList.contains('hidden')) return;
     if (paused && wasPaused) {animationFrame = requestAnimationFrame(render);return;}
     wasPaused = paused;
+    updateTutorialSlowdown(now);
     const alpha = movementProgress(now);
     draw(alpha,now);
     if(!over) animationFrame = requestAnimationFrame(render);
@@ -1958,12 +1963,18 @@ function drawRock(x, y, i) {
 // =====================================
 
 function drawFood(x, y, item = food) {
+  if(burgerIntroActive && item===food) {
+    const pulse=.5+.5*Math.sin(performance.now()/130);
+    ctx.save();ctx.strokeStyle=`rgba(255,238,57,${.35+.65*pulse})`;ctx.shadowColor='#ffe436';ctx.shadowBlur=10+10*pulse;ctx.lineWidth=2;
+    roundRect(x,y,20,20,5);ctx.stroke();ctx.restore();
+  }
   ctx.fillStyle = '#4c301a';
 
   roundRect(x + 3, y + 5, 14, 10, 4);
   ctx.fill();
 
-  const type = foodTypes[item?.type || 'normal'];
+  const baseType=foodTypes[item?.type || 'normal'];
+  const type=burgerIntroActive && item===food && Math.sin(performance.now()/130)>0 ? {...baseType,color:'#fff45b'} : baseType;
   ctx.shadowColor = type.color;
   ctx.shadowBlur = 6;
   ctx.fillStyle = type.color;

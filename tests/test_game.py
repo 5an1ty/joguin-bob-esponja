@@ -42,7 +42,7 @@ class GameTests(unittest.TestCase):
         self.errors = []
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
         self.page.goto(f'http://127.0.0.1:{self.server.server_port}/', wait_until='domcontentloaded')
-        self.page.evaluate("localStorage.setItem('bobSnakeBattleTutorialSeen','true')")
+        self.page.evaluate("localStorage.setItem('bobSnakeBattlePlayableTutorialSeen','true')")
         self.page.locator('#startBtn').click()
         self.page.evaluate("if(paused)togglePause()")
         self.page.evaluate('startGame();if(paused)togglePause();clearInterval(timer); obstacles=[]; food={x:20,y:15,type:"normal"}')
@@ -805,7 +805,7 @@ class GameTests(unittest.TestCase):
 
     def test_sandy_initial_uses_gate_recharge_and_orbiting_glove(self):
         self.check("""
-          gameMode='battle';character='sandy';startGame();clearTimeout(timer);obstacles=[];
+          gameMode='battle';character='sandy';startGame();abilityHintKills=-1000;abilityHintReady=false;clearTimeout(timer);obstacles=[];
           const kill=()=>{const e={x:0,y:0,hits:0,aggression:1};battleEnemies.push(e);damageBattleEnemy(e,3);};
           for(let i=0;i<4;i++)kill();
           assert(sandyUses===2 && sandyRechargeKills===0 && !sandyRechargeUnlocked,'initial kills do not create more uses');
@@ -840,7 +840,7 @@ class GameTests(unittest.TestCase):
 
     def test_sandy_charge_stacks_and_requires_two_kills(self):
         self.check("""
-          gameMode='battle';character='sandy';startGame();clearTimeout(timer);obstacles=[];
+          gameMode='battle';character='sandy';startGame();abilityHintKills=-1000;abilityHintReady=false;clearTimeout(timer);obstacles=[];
           assert(sandyUses===2 && !karateArmed,'two ready uses');
           const enemy={...snake[0],hits:0,maxHealth:3,aggression:1,stunnedUntil:0};battleEnemies=[enemy];
           assert(useAbility() && sandyUses===1 && !useAbility(),'one use per arm');
@@ -852,7 +852,7 @@ class GameTests(unittest.TestCase):
           for(let i=0;i<4;i++)kill();assert(sandyUses===3 && sandyRechargeKills===0,'stacks to three');
           kill();assert(sandyUses===3 && sandyRechargeKills===0,'no hidden credit beyond cap');
           updateAbilityButton();assert(document.getElementById('abilityBtn').textContent.includes('3/3'),'visible charges');
-          assert(useAbility() && sandyUses===2,'spend after cap');
+          abilityHintReady=false;assert(useAbility() && sandyUses===2,'spend after cap');
           startGame();clearTimeout(timer);assert(sandyUses===2 && sandyRechargeKills===0,'restart resets');
         """)
 
@@ -927,15 +927,68 @@ class GameTests(unittest.TestCase):
           gameMode='classic';updateCharacterChoices();assert(character==='bob','classic fallback');
         """)
 
-    def test_first_battle_tutorial_pauses_at_start_and_first_kill_only(self):
+    def test_playable_tutorial_events_slowdown_and_real_match(self):
         self.check("""
-          localStorage.removeItem('bobSnakeBattleTutorialSeen');gameMode='battle';startGame();
-          assert(paused && document.getElementById('overlayTitle').textContent.includes('Controles e Habilidades'),'intro pauses');
-          togglePause();clearTimeout(timer);obstacles=[];
-          damageBattleEnemy(battleEnemies[0],3);finishBattleAttack();tick();
-          assert(paused && document.getElementById('overlayTitle').textContent.includes('Como Funcionam as Ondas'),'first kill pauses');
-          assert(localStorage.getItem('bobSnakeBattleTutorialSeen')==='true','remember tutorial');
-          startGame();clearTimeout(timer);assert(!paused && !tutorialFirstKillPending,'not repeated');
+          localStorage.removeItem('bobSnakeBattlePlayableTutorialSeen');gameMode='battle';character='patrick';difficulty='hard';
+          const savedBest=best,savedBattleBest=battleBest;startGame();clearTimeout(timer);
+          assert(playableTutorial && character==='bob' && difficulty==='easy' && !paused,'automatic playable Bob training');
+          const stopAndAdvance=()=>{
+            assert(tutorialSlowdown && !paused,'event starts gradual slowdown');
+            const transition={...tutorialSlowdown};updateTutorialSlowdown(transition.startedAt+550);
+            assert(!paused && currentSpeed>transition.base,'gradual deceleration');
+            updateTutorialSlowdown(transition.startedAt+1101);
+            assert(paused && playableTutorial.explained,'stopped with explanation');
+            assert(document.querySelector('#overlayText p').textContent===battleLessons[playableTutorial.stage].text,'shared copy');
+            assert(document.querySelector('#overlayText svg'),'illustration');
+            advancePlayableTutorial();clearTimeout(timer);
+          };
+          food={...snake[0],type:'normal'};collectFood();stopAndAdvance();
+          assert(playableTutorial.stage===1 && useAbility(),'practice ability');stopAndAdvance();
+          food={...snake[0],type:'red'};collectFood();assert(battleWave===2,'actual next wave');stopAndAdvance();
+          for(let i=0;i<3;i++){gameTime=battleEnemies[0].nextMoveAt;updateTutorialEnemies();}
+          stopAndAdvance();
+          food={...snake[0],type:'normal'};collectFood();assert(frostBreath,'practice tenth burger');stopAndAdvance();
+          assert(paused && document.getElementById('overlayTitle').textContent==='Agora é pra valer!','completion message');
+          assert(best===savedBest && battleBest===savedBattleBest,'training does not change records');
+          advancePlayableTutorial();clearTimeout(timer);
+          assert(!playableTutorial && character==='patrick' && difficulty==='hard' && score===0,'real match restored');
+          assert(localStorage.getItem('bobSnakeBattlePlayableTutorialSeen')==='true','completion remembered');
+        """)
+
+    def test_tutorial_replay_menu_and_first_burger_highlight(self):
+        self.check("""
+          localStorage.removeItem('bobSnakeBurgerIntroSeen');gameMode='classic';startGame();clearTimeout(timer);
+          assert(burgerIntroActive,'first session burger highlighted');
+          food={...snake[0],type:'normal'};collectFood();assert(!burgerIntroActive,'highlight stops after pickup');
+          startGame();clearTimeout(timer);assert(!burgerIntroActive,'only first session');goMenu();
+        """)
+        self.page.locator('#tutorialMenuBtn').click()
+        self.assertTrue(self.page.locator('#tutorialPreview').is_visible())
+        self.assertEqual(self.page.locator('#tutorialCards svg').count(),5)
+        self.page.locator('#startTutorialBtn').click()
+        self.check("assert(playableTutorial && character==='bob','manual replay');goMenu();assert(!playableTutorial,'menu aborts training');")
+
+    def test_two_kill_hint_grants_one_free_ability_for_all_characters(self):
+        self.check("""
+          for(const name of ['bob','patrick','sandy']) {
+            gameMode='battle';character=name;startGame();clearTimeout(timer);obstacles=[];
+            for(let i=0;i<2;i++){const enemy={x:0,y:0,hits:0,maxHealth:3,aggression:1};battleEnemies.push(enemy);damageBattleEnemy(enemy,3);}
+            assert(abilityHintReady,'two kills trigger hint');
+            abilityReadyAt=gameTime+30000;patrickCharge=0;sandyUses=0;
+            const readyAt=abilityReadyAt;
+            updateAbilityButton();assert(!document.getElementById('abilityKeyHint').hidden,'desktop prompt');
+            obstacles=[];battleEnemies=[];
+            assert(useAbility(),'hint bypasses empty charges and cooldown');
+            assert(abilityReadyAt===readyAt && patrickCharge===0 && sandyUses===0,'free activation preserves resources');
+            assert(!abilityHintReady && abilityHintKills===0,'free activation claimed once');
+            assert(!useAbility(),'cannot repeat free cast');
+          }
+        """)
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.check("""
+          gameMode='battle';startGame();if(paused)togglePause();clearTimeout(timer);abilityHintReady=true;updateAbilityButton();
+          assert(document.getElementById('abilityBtn').classList.contains('ability-hint'),'mobile blinking button');
+          assert(document.getElementById('abilityKeyHint').hidden,'no keyboard prompt on mobile');
         """)
 
     def test_mobile_starts_paused_and_offers_fullscreen_all_modes(self):

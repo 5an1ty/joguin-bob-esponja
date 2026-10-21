@@ -81,3 +81,10 @@ A recarga da Sandy só é liberada depois de gastar os dois usos iniciais;
 spam sem cargas é bloqueado. Também são verificados a luva enquanto o golpe
 está armado, a transparência na imunidade, a recarga do Patrick com 1 abate
 e sua imunidade à colisão de todas as bombas, preservando a colisão com pedras.
+
+O tutorial jogável percorre cinco eventos reais com Bob: coleta, habilidade,
+raio e avanço de onda, bomba e sopro. Os testes verificam a desaceleração antes
+da pausa, textos e ilustrações compartilhados com o menu, repetição manual,
+restauração do personagem/dificuldade e ausência de alterações nos recordes.
+Também cobrem o destaque do primeiro hambúrguer e a dica após dois abates,
+com ativação gratuita de Bob, Patrick e Sandy e indicação própria no mobile.

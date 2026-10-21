@@ -19,7 +19,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 class GameTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        root = Path(__file__).resolve().parents[1] / 'megabrain'
+        root = Path(__file__).resolve().parents[1]
         cls.server = http.server.ThreadingHTTPServer(
             ('127.0.0.1', 0), functools.partial(QuietHandler, directory=str(root)))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)

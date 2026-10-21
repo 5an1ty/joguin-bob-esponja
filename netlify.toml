@@ -1,0 +1,4 @@
+[build]
+  base = "."
+  command = "bash build-site.sh"
+  publish = "dist"

@@ -5,48 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bob Esponja Snake</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="menu.css">
 </head>
 <body>
   <main class="app">
     <header class="topbar">
-      <div class="brand"><span class="bubble">✦</span><div><p class="eyebrow">FENDA DO BIQUÍNI</p><h1>BOB ESPONJA <span>SNAKE</span></h1></div></div>
+      <div class="brand"><a href="./" aria-label="Bob Esponja Snake, início"><h1>BOB ESPONJA <span>SNAKE</span></h1></a><p>Uma aventura na Fenda do Biquíni</p></div>
       <div class="best"><span id="bestLabel">🏆 Recorde</span> <strong id="best">0</strong></div>
     </header>
 
     <section id="menu" class="panel menu-panel">
       <div class="intro">
-        <div class="sun-rays"></div>
-        <p class="eyebrow">UMA AVENTURA SUBMARINA</p>
-        <h2>Preparado para<br><span>mergulhar?</span></h2>
-        <p>Coma hambúrgueres, cresça e desvie dos obstáculos!</p>
-        <div class="sea-icons" aria-hidden="true">🫧　🪸　🐚　🫧</div>
+        <div class="hero-copy"><p class="welcome">O fundo do mar está te esperando!</p><h2>Preparado para<br>mergulhar?</h2><p>Uma fome de aventura.<br>Um oceano de diversão.</p></div>
+        <div class="character-stage"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><img id="heroCharacter" src="assets/bob.svg" alt="Bob Esponja sorrindo de braços abertos"><span class="floating-burger" aria-hidden="true">🍔</span><span class="hero-spark" aria-hidden="true">✦</span><div class="hero-caption"><strong id="heroName">Bob Esponja</strong><span id="heroTagline">O otimismo é seu superpoder.</span></div></div>
+        <div class="quick-rules" aria-label="Regras do jogo"><div><span>🍔</span>Coma hambúrgueres</div><div><span>〰</span>Cresça</div><div><span>🪨</span>Desvie dos obstáculos</div></div>
+        <div class="seabed" aria-hidden="true"><span class="pineapple">🍍</span><span class="coral">🪸</span><span class="shell">🐚</span></div>
       </div>
       <div class="choices">
-        <h3>1. Escolha seu personagem</h3>
+        <h3><span class="step">1</span> Quem vai nessa aventura?</h3>
         <div class="character-options">
           <button class="character selected" data-character="bob" aria-pressed="true">
-            <span class="avatar bob">🧽</span><strong>Bob Esponja</strong><small>O otimista da Fenda</small>
+            <span class="avatar bob"><img src="assets/bob.svg" alt=""></span><span class="selection-check" aria-hidden="true">✓</span><strong>Bob Esponja</strong><small>O otimista da Fenda</small>
           </button>
           <button class="character" data-character="patrick" aria-pressed="false">
-            <span class="avatar patrick">⭐</span><strong>Patrick</strong><small>O amigo estrela-do-mar</small>
+            <span class="avatar patrick"><img src="assets/patrick.svg" alt=""></span><span class="selection-check" aria-hidden="true">✓</span><strong>Patrick</strong><small>O amigo estrela-do-mar</small>
           </button>
-          <button class="character" data-character="sandy" aria-pressed="false" hidden><span class="avatar">🐿️</span><strong>Sandy Bochechas</strong><small>Karate</small></button>
+          <button class="character" data-character="sandy" aria-pressed="false"><span class="avatar sandy"><img src="assets/sandy.svg" alt=""></span><span class="selection-check" aria-hidden="true">✓</span><strong>Sandy Bochechas</strong><small>Karate</small></button>
         </div>
-        <h3>2. Escolha o modo</h3>
+        <h3><span class="step">2</span> Escolha sua aventura</h3>
         <div class="mode-options">
-          <button class="mode-choice selected" data-mode="classic" aria-pressed="true"><strong>🌊 Clássico</strong><small>Explore e enfrente Plankton a cada 200 pontos</small></button>
-          <button class="mode-choice" data-mode="battle" aria-pressed="false"><strong>⚔ Batalha</strong><small>Ondas de inimigos cada vez mais agressivos</small></button>
+          <button class="mode-choice selected" data-mode="classic" aria-pressed="true"><strong>🌊 Clássico</strong><small>Cresça, explore e faça pontos</small></button>
+          <button class="mode-choice" data-mode="battle" aria-pressed="false"><strong>⚔ Batalha</strong><small>Use poderes e enfrente Planktons</small></button>
         </div>
-        <h3>3. Escolha a dificuldade</h3>
+        <h3><span class="step">3</span> Qual é o seu ritmo?</h3>
         <div class="difficulty-options">
-          <button class="difficulty selected" data-difficulty="easy" aria-pressed="true"><span>🐚</span><div><strong>Fácil</strong><small>Mais lento · Poucos obstáculos</small></div><i>✓</i></button>
-          <button id="tutorialDifficultyBtn" class="difficulty tutorial-entry hidden" type="button"><span>🎓</span><div><strong>Tutorial modo batalha</strong><small>Treino guiado com Bob · sem perder vidas</small></div><i>✓</i></button>
-          <button class="difficulty" data-difficulty="medium" aria-pressed="false"><span>🪸</span><div><strong>Médio</strong><small>Velocidade moderada · Mais obstáculos</small></div><i>✓</i></button>
-          <button class="difficulty" data-difficulty="hard" aria-pressed="false"><span>🌋</span><div><strong>Difícil</strong><small>Mais rápido · Muitos obstáculos</small></div><i>✓</i></button>
+          <button class="difficulty selected" data-difficulty="easy" aria-pressed="true"><span>🐚</span><div><strong>Fácil</strong><small>Um mergulho tranquilo</small></div><i>✓</i></button>
+          <button id="tutorialDifficultyBtn" class="difficulty tutorial-entry hidden" type="button"><span>🎓</span><div><strong>Tutorial</strong><small>Aprenda com o Bob</small></div><i>✓</i></button>
+          <button class="difficulty" data-difficulty="medium" aria-pressed="false"><span>🪸</span><div><strong>Médio</strong><small>Uma dose de aventura</small></div><i>✓</i></button>
+          <button class="difficulty" data-difficulty="hard" aria-pressed="false"><span>🌋</span><div><strong>Difícil</strong><small>Para os mais corajosos</small></div><i>✓</i></button>
         </div>
-        <button id="startBtn" class="primary">▶ COMEÇAR A JOGAR</button>
+        <button id="startBtn" class="primary"><span class="play-icon">▶</span> COMEÇAR A JOGAR <span class="cta-bubbles" aria-hidden="true">✦</span></button>
         <button id="howBtn" class="text-button" aria-expanded="false" aria-controls="howText">Como jogar?</button>
-        <button id="tutorialMenuBtn" class="text-button hidden" type="button" aria-expanded="false" aria-controls="tutorialPreview">Tutorial modo batalha</button>
+        <button id="tutorialMenuBtn" class="text-button hidden" type="button" aria-expanded="false" aria-controls="tutorialPreview">Ver guia ilustrado da Batalha</button>
         <section id="tutorialPreview" class="how-text hidden" aria-label="Tutorial ilustrado da Batalha"><div id="tutorialCards"></div><button id="startTutorialBtn" class="primary" type="button">COMEÇAR TUTORIAL JOGÁVEL</button></section>
         <div id="howText" class="how-text hidden">
           <h3>🎮 Guia da Fenda do Biquíni</h3><p><strong>Pontuação no Clássico:</strong> Fácil ×1, Médio ×2, Difícil ×3 (inclui bônus).</p><p><strong>Poderes na Batalha — C ou Power:</strong> Bob gira a espátula e cria um hambúrguer amarelo à frente (recarga 30s; libere a célula à frente antes de usar). Patrick começa com uma bomba pronta, imune a todas as bombas (colisões e explosões), cuja explosão atinge toda a arena. Uma estrela gira ao criar a bomba. Para recarregar, derrote 1 Plankton por outros ataques; abates da bomba especial não contam. Sandy, exclusiva da Batalha, arma um karate que espera o próximo contato: causa 2 de dano, paralisa por 3s e dá 3s de imunidade a tudo. Sandy começa com 2 usos; depois de gastar os dois, cada 2 abates recuperam 1 uso, até o limite de 3. Uma luva gira ao redor dela enquanto o golpe está armado. Durante os 3s de imunidade, Sandy fica transparente. Na primeira Batalha, um treino jogável com Bob ensina as mecânicas, desacelerando até pausar a cada situação. Repita pelo botão Tutorial modo batalha.</p><p><strong>⚔ Batalha:</strong> começa com um Plankton verde; os próximos duelos trazem inimigos laranja e vermelho, mais agressivos. Depois, cada grupo enfrenta três níveis de agressividade antes de aumentar: 2, 3, 4… até 10 Planktons vermelhos simultâneos. Cada hambúrguer vermelho acerta o inimigo mais próximo e paralisa por 3 segundos. A cada 10 hambúrgueres, solte um sopro congelante em cone que alcança o último Plankton naquela direção: 2 de dano no primeiro inimigo e 1 nos demais, congelados por 3 segundos. A cobra volta ao tamanho inicial. Derrotar um Plankton vermelho de agressividade máxima faz aparecer um hambúrguer amarelo de imunidade e turbo por 6 segundos. As barras de vida ficam sobre cada inimigo. Bombas explodem quando um Plankton pisa nelas: causam 1 de dano aos inimigos num raio de 15 células. Você é imune à explosão, mas Patrick também é imune à colisão de todas as bombas. Para os outros personagens, pisar na bomba conta como colisão com obstáculo (os poderes de atravessar obstáculos e imunidade protegem). Derrote todos para passar de onda. Vida por onda: nas ondas 1–2, todos têm 3; nas ondas 3–5, verdes têm 4 e os demais 3; da onda 6 em diante, verdes têm 5, laranjas 4 e vermelhos 3. Na Batalha, a velocidade base é constante; apenas o hambúrguer amarelo dá turbo temporário. Seu recorde na Batalha conta Planktons derrotados e fica salvo neste navegador. A dificuldade controla a velocidade e a densidade dos obstáculos.</p>
@@ -92,9 +92,10 @@
         <div><button data-dir="left" aria-label="Esquerda">◀︎</button><button data-dir="down" aria-label="Baixo">▼</button><button data-dir="right" aria-label="Direita">▶︎</button></div>
       </div>
     </section>
-    <footer>🌊 Feito para se divertir no fundo do mar <span>•</span> HTML · CSS · JavaScript</footer>
+    <footer>Feito para pequenos e grandes aventureiros. <span>🐚</span> Pronto para mais uma partida?</footer>
   </main>
   <script src="script.js"></script>
   <script src="tutorial.js"></script>
+  <script src="menu.js"></script>
 </body>
 </html>

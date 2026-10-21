@@ -340,6 +340,25 @@ let food = {
   y: 10
 };
 
+let cheatFoods = [];
+let cheatInput = '';
+function mapFoods() { return cheatFoods.length ? cheatFoods : (food ? [food] : []); }
+
+function activateBurgerRow() {
+  if(difficulty!=='easy' || paused || over || !menu.classList.contains('hidden') || cheatFoods.length) return false;
+  const occupied=[...snake,...activeEnemies()];
+  const rows=Array.from({length:ROWS},(_,y)=>y).filter(y=>!occupied.some(p=>p.y===y));
+  if(!rows.length) return false;
+  // Prefer a clear row; removing rocks from the chosen row only opens paths.
+  const clear=rows.filter(y=>!obstacles.some(p=>p.y===y));
+  const options=clear.length?clear:rows;
+  const y=options[Math.floor(Math.random()*options.length)];
+  obstacles=obstacles.filter(p=>p.y!==y);sceneCacheKey='';
+  cheatFoods=Array.from({length:COLS},(_,x)=>({x,y,id:++foodSerial,type:'normal'}));
+  food=cheatFoods[0];previousFood=null;updateStatus();
+  return true;
+}
+
 let obstacles = [];
 let obstaclePhase = 0;
 let scenePhase = 0;
@@ -506,7 +525,7 @@ function fillBattleWave() {
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) {
     const p={x,y};
     if(torusDistance(p,snake[0])>=8 && !snake.some(s=>same(s,p)) &&
-       !obstacles.some(o=>same(o,p)) && !battleEnemies.some(e=>same(e,p)) && !(food && same(food,p))) candidates.push(p);
+       !obstacles.some(o=>same(o,p)) && !battleEnemies.some(e=>same(e,p)) && !mapFoods().some(item=>same(item,p))) candidates.push(p);
   }
   while(battlePendingSpawns>0 && candidates.length) {
     const pos=candidates.splice(Math.floor(Math.random()*candidates.length),1)[0];
@@ -554,7 +573,7 @@ function spawnPlankton() {
   for (let y=0; y<ROWS; y++) for (let x=0; x<COLS; x++) {
     const p = {x,y};
     if (torusDistance(head,p) >= 8 && !snake.some(s=>same(s,p)) &&
-        !obstacles.some(o=>same(o,p)) && !(food && same(food,p))) cells.push(p);
+        !obstacles.some(o=>same(o,p)) && !mapFoods().some(item=>same(item,p))) cells.push(p);
   }
   if (!cells.length) return;
   plankton = {...cells[Math.floor(Math.random()*cells.length)], hits: 0, stunnedUntil: 0};
@@ -642,6 +661,7 @@ function collectFood() {
   if(gameMode==='battle' && ++battleBurgers>=10) {
     battleBurgers=0;releaseFrostBreath();
   }
+  if(cheatFoods.length) cheatFoods=cheatFoods.filter(item=>item.id!==food.id);
   addScore(10);
   return placeFood();
 }
@@ -933,6 +953,8 @@ function startGame() {
   planktonMotion = null;
   foodSerial = 0;
   food = null;
+  cheatFoods = [];
+  cheatInput = '';
   paused = false;
   over = false;
 
@@ -1017,7 +1039,7 @@ function generateObstacles(count) {
     };
 
     const onSnake = snake.some(s => same(s, p));
-    const onFood = food && same(food, p);
+    const onFood = mapFoods().some(item=>same(item,p));
     const onExisting = generated.some(
       obstacle => same(obstacle, p)
     );
@@ -1098,6 +1120,7 @@ function connectedArena(rocks) {
 }
 
 function placeFood() {
+  if(cheatFoods.length) {food=cheatFoods[0];return true;}
   // Cada candidato possui um caminho sem atravessar o corpo e espaço para
   // continuar depois de comer. A simulação inclui o crescimento da cobra.
   const blocked = new Set([...obstacles, ...snake.slice(1), ...activeEnemies()].map(cellKey));
@@ -1158,7 +1181,10 @@ function tick(stepAt = performance.now()) {
   moveMagnet();
   const head = wrap({x: snake[0].x + direction.x, y: snake[0].y + direction.y});
   // O ímã pode entregar a comida na posição atual da cabeça.
-  const eating = food && (same(head, food) || same(snake[0], food));
+  const foods=mapFoods();
+  const eatenFood=foods.find(item=>same(head,item)) || foods.find(item=>same(snake[0],item));
+  const eating=!!eatenFood;
+  if(eatenFood) food=eatenFood;
   const hitObstacle = obstacles.some(o => same(o,head));
   const body = eating ? snake : snake.slice(0,-1);
   const hitSelf = body.some(s=>same(s,head));
@@ -1250,6 +1276,12 @@ function setDirection(dir) {
 // =====================================
 
 document.addEventListener('keydown', e => {
+  if(!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if(difficulty==='easy' && !paused && !over && menu.classList.contains('hidden') && e.key.length===1) {
+      cheatInput=(cheatInput+e.key.toLowerCase()).slice(-6);
+      if(cheatInput==='atreus') {activateBurgerRow();cheatInput='';}
+    } else cheatInput='';
+  }
   const map = {
     ArrowUp: 'up',
     w: 'up',
@@ -1656,10 +1688,10 @@ function draw(alpha = movementProgress(), now = performance.now()) {
   }
 
   // Hambúrguer
-  if (food) {
-    const from = previousFood?.id === food.id ? previousFood : food;
-    paintWrapped(interpolateCell(from, food, alpha), (x,y) => {
-      ctx.save(); drawFood(x,y); ctx.restore();
+  for(const item of mapFoods()) {
+    const from = previousFood?.id === item.id ? previousFood : item;
+    paintWrapped(interpolateCell(from, item, alpha), (x,y) => {
+      ctx.save(); drawFood(x,y,item); ctx.restore();
     });
   }
 
@@ -1724,13 +1756,13 @@ function drawRock(x, y, i) {
 // DESENHAR HAMBÚRGUER
 // =====================================
 
-function drawFood(x, y) {
+function drawFood(x, y, item = food) {
   ctx.fillStyle = '#4c301a';
 
   roundRect(x + 3, y + 5, 14, 10, 4);
   ctx.fill();
 
-  const type = foodTypes[food?.type || 'normal'];
+  const type = foodTypes[item?.type || 'normal'];
   ctx.shadowColor = type.color;
   ctx.shadowBlur = 6;
   ctx.fillStyle = type.color;
@@ -1757,9 +1789,9 @@ function drawFood(x, y) {
   ctx.arc(x + 7, y + 5, 1, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
-  if (food?.type !== 'normal') {
+  if (item?.type !== 'normal') {
     ctx.fillStyle = '#112c49'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText({ghost:'G', drill:'O', super:'⚡', magnet:'M', red:'ϟ'}[food.type] || '', x+10, y+12);
+    ctx.fillText({ghost:'G', drill:'O', super:'⚡', magnet:'M', red:'ϟ'}[item.type] || '', x+10, y+12);
   }
 }
 function drawSeaDecorations() {

@@ -736,6 +736,51 @@ class GameTests(unittest.TestCase):
         self.page.wait_for_function('!document.fullscreenElement')
         self.assertTrue(self.page.locator('#menu').is_visible())
 
+    def test_secret_code_easy_only_and_row_lifecycle(self):
+        self.page.keyboard.type('atreus')
+        self.check("""
+          assert(cheatFoods.length===COLS,'full row');
+          const row=cheatFoods[0].y;
+          assert(cheatFoods.every(item=>item.y===row && item.type==='normal'),'normal row');
+          assert(new Set(cheatFoods.map(item=>item.x)).size===COLS,'all columns');
+          assert(!cheatFoods.some(item=>snake.some(p=>same(p,item)) || obstacles.some(p=>same(p,item))),'safe placement');
+          const ids=cheatFoods.map(item=>item.id).join(',');
+          assert(!activateBurgerRow(),'no stacking');placeFood();
+          assert(cheatFoods.map(item=>item.id).join(',')===ids,'no generation before last');
+          while(cheatFoods.length>1) {
+            food=cheatFoods[cheatFoods.length-1];
+            const count=cheatFoods.length;
+            collectFood();assert(cheatFoods.length===count-1,'any order collection');
+            assert(food && cheatFoods.includes(food),'remaining hamburger selected');
+          }
+          food=cheatFoods[0];collectFood();
+          assert(!cheatFoods.length && food && !ids.split(',').includes(String(food.id)),'normal spawning resumes');
+          startGame();clearTimeout(timer);assert(!cheatFoods.length,'restart clears row');
+        """)
+        for difficulty in ['medium','hard']:
+            self.page.evaluate(f"difficulty='{difficulty}';startGame();clearTimeout(timer)")
+            self.page.keyboard.type('atreus')
+            self.check("assert(!cheatFoods.length,'easy only');")
+        self.assertNotIn('atreus',self.page.locator('#howText').inner_text().lower())
+
+    def test_secret_row_mobile_and_movement_collect_any_cell(self):
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.check("""
+          startGame();clearTimeout(timer);obstacles=[];
+          assert(activateBurgerRow() && cheatFoods.length===18,'mobile row');
+          const item=cheatFoods[10];
+          snake=[wrap({x:item.x-1,y:item.y})];previousSnake=snake.map(p=>({...p}));
+          direction={x:1,y:0};nextDirection=direction;directionQueue=[];
+          const id=item.id;tick();
+          assert(!over && cheatFoods.length===17 && !cheatFoods.some(p=>p.id===id),'movement collects non-first cell');
+          draw();
+          for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) {
+            if(!snake.some(p=>p.y===y)) obstacles.push({x,y});
+          }
+          cheatFoods=[];assert(activateBurgerRow(),'opens blocked row');
+          assert(!obstacles.some(p=>p.y===cheatFoods[0].y),'rocks cleared from row');
+        """)
+
     def test_frost_cone_damage_freeze_wrap_and_shrink(self):
         self.check("""
           gameMode='battle';startGame();clearInterval(timer);obstacles=[];

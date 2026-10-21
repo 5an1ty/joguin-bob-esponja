@@ -188,6 +188,45 @@ class GameTests(unittest.TestCase):
           for(let i=0;i<40;i++) {placeFood();assert(!(food.x===0&&food.y===0),'isolated food');}
         ''')
 
+    def test_food_refreshes_blocked_board_without_ending_match(self):
+        self.check("""
+          for(const mode of ['classic','battle']) {
+            gameMode=mode;startGame();if(paused)togglePause();clearTimeout(timer);
+            score=123;powers={ghost:gameTime+8000};
+            const original=snake.map(p=>({...p}));
+            obstacles=[];
+            for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) {
+              if(!snake.some(p=>same(p,{x,y})))obstacles.push({x,y});
+            }
+            assert(placeFood() && food && !over,'blocked map recovered');
+            assert(score===123 && hasPower('ghost'),'score and powers preserved');
+            assert(JSON.stringify(snake)===JSON.stringify(original),'body preserved when possible');
+            assert(!obstacles.some(p=>same(p,food)) && !snake.some(p=>same(p,food)),'food is free');
+            assert(!activeEnemies().some(p=>same(p,food)),'food avoids enemies');
+          }
+        """)
+
+    def test_full_snake_refresh_preserves_battle_and_safe_exit(self):
+        self.check("""
+          for(const mobile of [false,true]) {
+            COLS=mobile?18:30;ROWS=mobile?18:21;
+            gameMode='battle';startGame();if(paused)togglePause();clearTimeout(timer);
+            direction={x:1,y:0};nextDirection={...direction};
+            snake=[{x:0,y:0}];
+            for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(x||y)snake.push({x,y});
+            obstacles=[];score=456;
+            battleEnemies=[{x:1,y:0,hits:1,aggression:2,stunnedUntil:gameTime+99999,nextMoveAt:gameTime+99999},
+              {x:2,y:0,hits:2,aggression:3,stunnedUntil:gameTime+99999,nextMoveAt:gameTime+99999}];
+            const enemies=battleEnemies.slice();
+            assert(placeFood() && food && !over,'full board recovered');
+            assert(snake.length===INITIAL_SNAKE_LENGTH && score===456,'size reset without score loss');
+            assert(enemies.every((e,i)=>battleEnemies[i]===e) && enemies[0].hits===1 && enemies[1].hits===2,'enemy progress preserved');
+            assert(!snake.some(p=>same(p,food)) && !activeEnemies().some(p=>same(p,food)),'safe food');
+            assert(!activeEnemies().some(e=>snake.some(p=>same(p,e))),'no enemy on refreshed body');
+            tick();assert(!over,'safe first move after refresh');
+          }
+        """)
+
     def test_mobile_console_controls_and_guide(self):
         for width, height in [(390,844),(360,640),(768,1024),(844,390)]:
             self.page.set_viewport_size({'width':width,'height':height})

@@ -1318,8 +1318,45 @@ function connectedArena(rocks) {
   return seen.size === COLS * ROWS - blocked.size;
 }
 
+// Recuperação limitada: tenta reorganizar o cenário antes de reduzir a cobra.
 function placeFood() {
   if(cheatFoods.length) {food=cheatFoods[0];return true;}
+  if(tryPlaceSafeFood()) return true;
+  food = null;
+  generateObstacles(obstacleCount());
+  sceneCacheKey = '';
+  if(tryPlaceSafeFood()) return true;
+  // Um cenário livre resolve passagens bloqueadas sem alterar o progresso.
+  obstacles = [];
+  if(tryPlaceSafeFood()) return true;
+
+  // Se o corpo ou os inimigos fecharem todas as saídas, renova a área
+  // imediata da cabeça e mantém os inimigos, suas vidas e a onda atual.
+  const head = {...snake[0]};
+  snake = Array.from({length:INITIAL_SNAKE_LENGTH}, (_,i) =>
+    wrap({x:head.x-direction.x*i, y:head.y-direction.y*i}));
+  const reserved = new Set(snake.map(cellKey));
+  for(let i=1;i<=2;i++) reserved.add(cellKey(wrap({x:head.x+direction.x*i,y:head.y+direction.y*i})));
+  const enemies = activeEnemies();
+  const occupied = new Set(enemies.filter(enemy=>!reserved.has(cellKey(enemy))).map(cellKey));
+  for(const enemy of enemies) {
+    if(!reserved.has(cellKey(enemy))) continue;
+    for(let key=0;key<COLS*ROWS;key++) {
+      if(reserved.has(key) || occupied.has(key)) continue;
+      enemy.x=key%COLS;enemy.y=Math.floor(key/COLS);
+      enemy.motion=null;occupied.add(key);break;
+    }
+  }
+  previousSnake = snake.map(p=>({...p}));
+  previousFood = null;
+  inputMotion = null;
+  planktonMotion = null;
+  directionQueue = [];
+  nextDirection = {...direction};
+  return tryPlaceSafeFood();
+}
+
+function tryPlaceSafeFood() {
   // Cada candidato possui um caminho sem atravessar o corpo e espaço para
   // continuar depois de comer. A simulação inclui o crescimento da cobra.
   const blocked = new Set([...obstacles, ...snake.slice(1), ...activeEnemies()].map(cellKey));
@@ -1355,10 +1392,6 @@ function placeFood() {
       return true;
     }
   }
-  food = null;
-  endGame();
-  document.getElementById('overlayTitle').textContent = 'Tabuleiro concluído!';
-  document.getElementById('overlayText').textContent = 'Não há espaço seguro para outro hambúrguer.';
   return false;
 }
 

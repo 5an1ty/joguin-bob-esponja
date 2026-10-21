@@ -1,6 +1,6 @@
 // Shared lesson copy and illustrations for both the menu and the playable training.
 const battleLessons = [
-  {id:'food', title:'O almoço está servido!', task:'Leve Bob até o hambúrguer.', icons:['🧽','→','🍔'], text:'Foque nos hambúrgueres: eles dão pontos e fazem o personagem crescer. Use as setas, WASD ou deslize pelo direcional. As bordas são portais: saia por um lado e volte pelo outro.'},
+  {id:'food', title:'O almoço está servido!', task:'Leve Bob até o hambúrguer.', icons:['🧽','→','🍔'], text:'Foque nos hambúrgueres: eles dão pontos e fazem o personagem crescer. Use as setas ou WASD no computador. No celular, arraste o dedo no tabuleiro e mude de direção sem levantar o dedo. As bordas são portais: saia por um lado e volte pelo outro.'},
   {id:'ability', title:'Uma espátula, um superlanche!', task:'Aperte C ou toque em Power.', icons:['🧽','🍳','⚡'], text:'C no PC ou Power no celular ativa sua habilidade. Bob gira a espátula e cria um hambúrguer amarelo à frente: imunidade e turbo por 6 segundos. A recarga normal é de 30 segundos. Depois de 2 abates sem usar o poder, a dica piscante oferece uma ativação grátis, sem gastar carga ou recarga.'},
   {id:'waves', title:'Um raio e uma nova onda!', task:'Este Plankton já está ferido. Pegue o hambúrguer vermelho para derrotá-lo.', icons:['🍔','ϟ','👁️'], text:'Hambúrgueres vermelhos disparam raios que causam 1 de dano e paralisam por 3 segundos. Derrote todos os Planktons para avançar: primeiro duelos, depois grupos até 10. Verde, laranja e vermelho indicam agressividade. Ondas 1–2: todos têm 3 de vida. Ondas 3–5: verde 4, demais 3. Da onda 6: verde 5, laranja 4, vermelho 3. Derrotar um vermelho rende um hambúrguer amarelo.'},
   {id:'bomb', title:'Armadilha à vista!', task:'Observe o Plankton pisar na bomba. Você pode continuar se movendo.', icons:['👁️','💣','💥'], text:'Bombas comuns explodem quando Plankton pisa e causam 1 de dano em um raio de 15 células. Você é imune à explosão; para Bob e Sandy, pisar na bomba conta como obstáculo. Patrick atravessa todas as bombas. Sua bomba especial atinge toda a arena e recarrega com 1 abate de outra fonte.'},
@@ -27,8 +27,10 @@ function beginPlayableTutorial() {
   character='bob';difficulty='easy';gameMode='battle';
   startGame({skipTutorial:true});
 }
-function prepareTutorialLesson(index) {
+function prepareTutorialLesson(index,phase="demo") {
   const lesson=battleLessons[index];if(!lesson)return;
+  stopMovementGuide();
+  playableTutorial.lessonPhase=phase;playableTutorial.demoStartedAt=performance.now();
   playableTutorial.stage=index;playableTutorial.explained=false;playableTutorial.final=false;
   tutorialSlowdown=null;gameTime=0;score=0;battleKills=0;battleWave=index<3?1:2;scenePhase=0;obstaclePhase=0;
   powers={};abilityReadyAt=0;abilityHintKills=0;abilityHintReady=false;beam=null;frostBreath=null;bombExplosions=[];
@@ -36,22 +38,25 @@ function prepareTutorialLesson(index) {
   snake=[{x:8,y:10},{x:7,y:10},{x:6,y:10},{x:5,y:10}];previousSnake=snake.map(p=>({...p}));
   direction={x:1,y:0};nextDirection=direction;directionQueue=[];inputMotion=null;lastVisualPositions=[];
   obstacles=[];food={x:11,y:10,type:index===2?'red':'normal',id:++foodSerial};previousFood={...food};
+  if(index===0 && phase==='practice' && mobileGameplay)food={x:12,y:7,type:'normal',id:++foodSerial};
   if(index===1)food={x:COLS-3,y:ROWS-3,type:'normal',id:++foodSerial};
-  const enemy=(x,y,hits=0)=>({x,y,hits,maxHealth:3,aggression:1,stunnedUntil:0,nextMoveAt:gameTime+600,motion:null});
+  const enemy=(x,y,hits=0)=>({...wrap({x,y}),hits,maxHealth:3,aggression:1,stunnedUntil:0,nextMoveAt:gameTime+600,motion:null});
   if(index===2)battleEnemies=[enemy(15,10,2)];
-  if(index===3){obstacles=[{x:13,y:10,bomb:true}];battleEnemies=[enemy(16,10,2)];food={x:4,y:4,type:'normal',id:++foodSerial};}
+  if(index===3){obstacles=[{x:13,y:10,bomb:true}];battleEnemies=[enemy(Math.min(16,COLS-1),10,2)];food={x:4,y:4,type:'normal',id:++foodSerial};}
   if(index===4)battleEnemies=[enemy(14,10),enemy(16,11)];
   sceneCacheKey='';currentSpeed=settings.easy.speed*(mobileGameplay?1.3:1);motionDuration=currentSpeed;lastMoveAt=performance.now();
   scoreEl.textContent='0';document.getElementById('level').textContent='Treino';
-  document.getElementById('trainingObjective').hidden=false;document.getElementById('trainingObjective').textContent=lesson.task;
+  document.getElementById('trainingObjective').hidden=false;document.getElementById('trainingObjective').textContent=(phase==='demo'?'Observe: ':'Sua vez: ')+lesson.task;
   updateStatus();draw();if(!paused)scheduleTick();
+  if(index===0 && phase==='practice' && mobileGameplay)beginMovementGuide();
 }
 function triggerTutorialLesson(id) {
   if(!playableTutorial || playableTutorial.explained || tutorialSlowdown || battleLessons[playableTutorial.stage].id!==id)return;
-  if(id==='waves'){battleWave=2;battleEnemies=[{x:15,y:7,hits:0,maxHealth:3,aggression:2,stunnedUntil:0,nextMoveAt:Infinity,motion:null}];}
+  if(id==='waves'){battleWave=2;battleEnemies=[{...wrap({x:15,y:7}),hits:0,maxHealth:3,aggression:2,stunnedUntil:0,nextMoveAt:Infinity,motion:null}];}
   tutorialSlowdown={startedAt:performance.now(),duration:1100,base:currentSpeed};
 }
 function updateTutorialSlowdown(now) {
+  if(playableTutorial?.lessonPhase==='demo' && !paused && !over && !tutorialSlowdown && !playableTutorial.explained && playableTutorial.stage===1 && now-playableTutorial.demoStartedAt>900) useAbility();
   if(!playableTutorial || !tutorialSlowdown || paused || over)return;
   const transition=tutorialSlowdown;
   const progress=Math.min(1,(now-transition.startedAt)/transition.duration);
@@ -62,12 +67,16 @@ function updateTutorialSlowdown(now) {
 }
 function showPlayableLesson() {
   if(!playableTutorial)return;
+  if(playableTutorial.lessonPhase==='demo') {
+    prepareTutorialLesson(playableTutorial.stage,'practice');return;
+  }
+  stopMovementGuide();
   playableTutorial.explained=true;if(!paused)togglePause();
   const lesson=battleLessons[playableTutorial.stage];
   document.getElementById('overlayTitle').textContent=lesson.title;
   const paragraph=document.createElement('p');paragraph.textContent=lesson.text;
   document.getElementById('overlayText').replaceChildren(lessonImage(lesson),paragraph);
-  document.getElementById('resumeBtn').textContent=playableTutorial.stage===battleLessons.length-1?'CONCLUIR TREINO':'PRATICAR PRÓXIMO PASSO';
+  document.getElementById('resumeBtn').textContent=playableTutorial.stage===battleLessons.length-1?'CONCLUIR TREINO':'VER PRÓXIMA DEMONSTRAÇÃO';
 }
 function advancePlayableTutorial() {
   if(!playableTutorial || !playableTutorial.explained)return false;
@@ -95,7 +104,7 @@ function abortPlayableTutorial() {
 function updateTutorialEnemies() {
   if(!playableTutorial || playableTutorial.stage!==3 || playableTutorial.explained || tutorialSlowdown)return;
   const enemy=battleEnemies[0];if(!enemy || gameTime<enemy.nextMoveAt)return;
-  enemy.x--;enemy.nextMoveAt=gameTime+600;
+  enemy.x=wrap({x:enemy.x-1,y:enemy.y}).x;enemy.nextMoveAt=gameTime+600;
   const bomb=obstacles.find(o=>o.bomb && same(o,enemy));if(bomb)explodeBomb(bomb);
 }
 function selectPlayableTutorial() {

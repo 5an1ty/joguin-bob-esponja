@@ -18,12 +18,12 @@ CHROMIUM_PATH=/caminho/do/chromium python3 -m unittest discover -s tests -v
 
 Cobrem portais nas bordas, colisões e poderes temporários, pausa e reinício,
 ímã, geração de comida, progressão, raios e perseguição do Plankton,
-layout do direcional em quatro tamanhos e entrada/saída da tela cheia.
+layout dos controles por gesto em quatro tamanhos e entrada/saída da tela cheia.
 Também validam o arrasto contínuo com eventos de toque do Chromium, proporção e
 resolução em telas com densidade 2×, interpolação entre frames, efeitos visuais,
 frequência de poderes por dificuldade e alternância normal/vermelho no Plankton.
 As regressões do HUD verificam a explicação do hambúrguer fora do mapa, a barra de
-vida sem números, os raios partindo dos dois olhos e a folga abaixo do direcional.
+vida sem números, os raios partindo dos dois olhos e a separação entre mapa e poder.
 A orientação e o comportamento da tela cheia em aparelhos reais devem ser
 conferidos também no navegador do dispositivo.
 
@@ -33,9 +33,9 @@ indicação permanece fixa no canto superior esquerdo sem interceptar os control
 Também verificam o limite de três poderes, o bloqueio de especiais até um efeito
 expirar, o mapa mobile menor e a fila de curvas rápidas sem inversão da cobra.
 
-A grade mobile 18×18 é validada com comida segura, obstáculos proporcionais e
+A grade mobile adaptativa de 16 colunas é validada com comida segura, obstáculos proporcionais e
 portais nas bordas. Os testes também confirmam o reaproveitamento de cenários e
-sprites luminosos entre frames e uma única medição dos botões por gesto.
+sprites luminosos entre frames e arrasto contínuo com várias curvas por gesto.
 
 A resposta visual imediata às curvas, continuidade entre passos e pausa/retomada
 sem saltos também são verificadas. A suíte cobre a pausa no canto superior
@@ -88,3 +88,9 @@ da pausa, textos e ilustrações compartilhados com o menu, repetição manual,
 restauração do personagem/dificuldade e ausência de alterações nos recordes.
 Também cobrem o destaque do primeiro hambúrguer e a dica após dois abates,
 com ativação gratuita de Bob, Patrick e Sandy e indicação própria no mobile.
+
+## Interface mobile por gestos
+
+O mobile agora começa sem pausa, usa arrasto contínuo sobre o canvas e não exibe D-Pad. A grade é adaptada no início da partida e permanece estável durante rotações. Os controles de reinício, pausa e tela cheia ficam acima do mapa; o poder ocupa o rodapé na Batalha.
+
+`test_mobile_ui.py` verifica quatro tamanhos de tela, gesto com várias curvas e cancelamento, guia inicial sem pausa e sem perda de pontuação, brilho do poder disponível, reinício imediato e demonstração antes da prática no treino.

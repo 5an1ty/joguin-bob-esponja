@@ -1,0 +1,39 @@
+/* Controles superiores ficam fora do mapa; o rodapé é reservado à habilidade. */
+#restartBtn{font-size:24px;min-width:48px;min-height:48px;touch-action:manipulation}
+#topPauseBtn{min-width:48px;min-height:48px;touch-action:manipulation}
+#pauseBtn{display:none}
+#overlayRestartBtn{min-height:48px}
+#abilityBtn.ability-ready{color:#fff;background:linear-gradient(120deg,#6b21a8,#a629ed);border:2px solid #dc9eff;animation:power-neon 1.35s ease-in-out infinite}
+@keyframes power-neon{0%,100%{box-shadow:0 0 8px #b04cff80,inset 0 0 8px #e7afff30}50%{box-shadow:0 0 22px #b04cffe6,0 0 36px #be55ff60,inset 0 0 15px #e7afff50}}
+#movementGuide{position:absolute;z-index:6;left:50%;top:14%;transform:translateX(-50%);width:min(90%,310px);padding:12px 16px;border-radius:20px;background:#07395be8;color:white;pointer-events:none;text-align:center;box-shadow:0 5px 20px #00273d40}
+#movementGuide strong,#movementGuide>span:last-child{display:block;font-size:14px;line-height:1.5}#movementGuide>span:last-child{font-size:11px;color:#d5f6ff}.gesture-hand{display:block;font-size:46px;line-height:1.3;animation:drag-hand 2.2s ease-in-out infinite;filter:drop-shadow(0 0 5px #c2ffff)}
+@keyframes drag-hand{0%,100%{transform:translateX(-48px) rotate(-12deg)}50%{transform:translateX(48px) rotate(12deg)}}
+@media(max-width:900px),(pointer:coarse){
+  #game.game-panel .touch-controls,#game.game-panel:is(:fullscreen,.fallback-fullscreen) .touch-controls{display:none!important}
+  #game #abilityBtn{width:100%;min-height:70px;border-radius:18px;font-size:17px;margin:14px 0 0}
+  #game .game-footer{font-size:0;min-height:0;padding:0}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen){padding:0!important;width:100vw;height:100dvh;overflow:hidden}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head{position:absolute!important;top:env(safe-area-inset-top,0px)!important;left:8px!important;right:8px!important;height:62px;gap:6px;pointer-events:auto;align-items:center;flex-wrap:nowrap;margin:0}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head>div:first-child{display:none}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .stat{min-width:48px;width:auto;padding:4px 8px;background:#d7f7ff;border:0;border-radius:12px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .stat strong{font-size:16px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-actions{margin-left:auto;gap:5px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) #headerMenuBtn{display:none}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) #restartBtn,#game.game-panel:is(:fullscreen,.fallback-fullscreen) #topPauseBtn{min-width:44px;width:44px;min-height:44px;height:44px;font-size:23px;pointer-events:auto}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) #fullscreenBtn{position:static!important;inset:auto!important;width:44px!important;min-width:44px!important;height:44px!important;max-width:none!important;font-size:0!important;margin:0!important;display:grid!important;place-items:center;pointer-events:auto}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) #fullscreenBtn:before{content:'⛶';font-size:25px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .status-bar{position:absolute!important;top:calc(65px + env(safe-area-inset-top,0px))!important;bottom:auto!important;left:10px!important;right:10px!important;max-width:none!important;width:auto;margin:0;color:#e0fcff;font-size:10px;min-height:18px;line-height:1.35;pointer-events:none}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) #abilityBtn{position:absolute;left:12px!important;right:12px!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;width:calc(100% - 24px)!important;max-width:none!important;min-height:70px;height:70px;padding:10px 14px;transform:none!important;margin:0;font-size:16px;z-index:4}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .board-wrap{border-width:3px!important;border-radius:14px!important}
+  #game .board-wrap{touch-action:none}
+}
+@media(prefers-reduced-motion:reduce){.gesture-hand,#abilityBtn.ability-ready{animation:none!important}#abilityBtn.ability-ready{box-shadow:0 0 18px #ba55ff}}
+/* Ícone desenhado em CSS para não depender do glifo de pausa do dispositivo. */
+#topPauseBtn{position:relative;font-size:0!important}
+#topPauseBtn:before{content:'';display:block;margin:auto;width:18px;height:22px;background:currentColor;clip-path:polygon(0 0,35% 0,35% 100%,0 100%,0 0,65% 0,100% 0,100% 100%,65% 100%,65% 0)}
+#topPauseBtn[data-state=paused]:before{clip-path:polygon(0 0,100% 50%,0 100%)}
+#topPauseBtn[data-state=over]:before{content:'↻';font-size:25px;line-height:22px;background:none;clip-path:none;width:28px;height:26px}
+#restartBtn:after,#topPauseBtn:after,#abilityBtn:after{content:'';position:absolute;inset:-5px;pointer-events:auto}
+#abilityBtn{position:relative}
+#game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-actions{pointer-events:auto}
+#game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-actions #fullscreenBtn{position:static!important;inset:auto!important;margin:0!important}

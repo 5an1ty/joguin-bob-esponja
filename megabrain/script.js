@@ -135,158 +135,89 @@ game.insertBefore(fullscreenBtn, game.firstChild);
 const fullscreenStyles = document.createElement('style');
 
 fullscreenStyles.textContent = `
-  #game:fullscreen {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: none !important;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: max(8px, env(safe-area-inset-top))
-             max(8px, env(safe-area-inset-right))
-             max(8px, env(safe-area-inset-bottom))
-             max(8px, env(safe-area-inset-left));
-    background: #062b49;
+  #game:fullscreen, #game.fallback-fullscreen {
+    position: fixed !important; inset: 0 !important; z-index: 99999;
+    width: 100vw !important; height: 100dvh !important; max-width: none;
+    padding: 0 !important; border: 0; border-radius: 0; overflow: hidden;
+    background: #064d83;
   }
-
-  #game:fullscreen #board,
-  #game.fallback-fullscreen #board {
-    width: min(100%, calc((100vh - 150px) * 30 / 21)) !important;
-    max-width: none !important;
-    height: auto !important;
-    aspect-ratio: 30 / 21;
-    object-fit: contain;
+  #game:is(:fullscreen, .fallback-fullscreen) .board-wrap {
+    position: absolute; inset: 0; border: 0; border-radius: 0; box-shadow: none;
   }
-
-  #game.fallback-fullscreen {
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 99999 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: none !important;
-    overflow: auto !important;
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    padding: max(8px, env(safe-area-inset-top))
-             max(8px, env(safe-area-inset-right))
-             max(8px, env(safe-area-inset-bottom))
-             max(8px, env(safe-area-inset-left));
-    background: #062b49;
+  #game:is(:fullscreen, .fallback-fullscreen) #board {
+    width: 100% !important; height: 100% !important; max-width: none !important;
+    aspect-ratio: auto !important; margin: 0 !important;
   }
-
-  #game.fallback-fullscreen #board {
-    width: min(100%, calc((100vh - 150px) * 30 / 21)) !important;
-    max-width: none !important;
-    height: auto !important;
+  #game:is(:fullscreen, .fallback-fullscreen) .game-head {
+    position: absolute; top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left)); z-index: 2;
+    color: white; pointer-events: none; opacity: .85;
   }
-
-  #game:fullscreen #fullscreenBtn,
-  #game.fallback-fullscreen #fullscreenBtn {
-    align-self: flex-end;
-    margin: 0 0 6px auto;
+  #game:is(:fullscreen, .fallback-fullscreen) .game-head > div:first-child,
+  #game:is(:fullscreen, .fallback-fullscreen) .game-footer { display: none; }
+  #game:is(:fullscreen, .fallback-fullscreen) #pauseBtn { pointer-events: auto; }
+  #game:is(:fullscreen, .fallback-fullscreen) #fullscreenBtn {
+    position: absolute !important; top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right)); margin: 0 !important; z-index: 3 !important;
   }
-
-  @media (max-height: 500px) {
-    #game:fullscreen #board,
-    #game.fallback-fullscreen #board {
-      width: min(100%, calc((100vh - 105px) * 30 / 21)) !important;
-    }
+  #game:is(:fullscreen, .fallback-fullscreen) .touch-controls {
+    display: flex; position: absolute; bottom: max(8px, env(safe-area-inset-bottom));
+    right: max(8px, env(safe-area-inset-right)); z-index: 3; margin: 0; opacity: .8;
   }
+  #game:is(:fullscreen, .fallback-fullscreen) .touch-controls button {
+    width: 48px; height: 44px; min-width: 44px; min-height: 44px;
+  }
+  #game:is(:fullscreen, .fallback-fullscreen) .overlay { z-index: 5; }
+  #game.rotated-fullscreen {
+    inset: auto !important; top: 0 !important; left: 100vw !important;
+    width: 100dvh !important; height: 100vw !important;
+    transform: rotate(90deg); transform-origin: top left;
+  }
+  #game:is(:fullscreen, .fallback-fullscreen) .overlay-card { padding: 10px; }
+  body.game-fullscreen { overflow: hidden; }
 `;
-
 document.head.appendChild(fullscreenStyles);
 
-async function toggleFullscreen() {
-  const isNativeFullscreen =
-    document.fullscreenElement === game;
-
-  const isFallbackFullscreen =
-    game.classList.contains('fallback-fullscreen');
-
-  if (isNativeFullscreen || isFallbackFullscreen) {
-    if (isNativeFullscreen && document.exitFullscreen) {
-      try {
-        await document.exitFullscreen();
-      } catch (error) {
-        console.warn(
-          'Não foi possível sair da tela cheia nativa:',
-          error
-        );
-      }
-    }
-
-    game.classList.remove('fallback-fullscreen');
-    fullscreenBtn.textContent = '⛶ Tela cheia';
-    return;
-  }
-
-  if (game.requestFullscreen) {
-    try {
-      await game.requestFullscreen();
-      fullscreenBtn.textContent = '⛶ Sair da tela cheia';
-      return;
-    } catch (error) {
-      console.warn(
-        'Tela cheia nativa indisponível; usando modo adaptável.',
-        error
-      );
-    }
-  }
-
-  // Alternativa visual para navegadores sem Fullscreen API.
-  game.classList.add('fallback-fullscreen');
-  fullscreenBtn.textContent = '⛶ Sair da tela cheia';
+function isFullscreen() {
+  return document.fullscreenElement === game || game.classList.contains('fallback-fullscreen');
 }
 
-fullscreenBtn.addEventListener('click', toggleFullscreen);
-
-document.addEventListener('fullscreenchange', () => {
-  const active = document.fullscreenElement === game;
-
-  if (
-    !active &&
-    !game.classList.contains('fallback-fullscreen')
-  ) {
-    fullscreenBtn.textContent = '⛶ Tela cheia';
-  }
-
+async function leaveFullscreen() {
+  if (document.fullscreenElement === game) await document.exitFullscreen();
+  game.classList.remove('fallback-fullscreen', 'rotated-fullscreen');
+  if (screen.orientation?.unlock) screen.orientation.unlock();
   resizeBoardForViewport();
-});
+}
 
+async function toggleFullscreen() {
+  if (isFullscreen()) {
+    await leaveFullscreen();
+    return;
+  }
+  try {
+    if (!game.requestFullscreen) throw new Error('Fullscreen indisponível');
+    await game.requestFullscreen();
+  } catch {
+    game.classList.add('fallback-fullscreen');
+  }
+  try {
+    if (screen.orientation?.lock) await screen.orientation.lock('landscape');
+  } catch {
+    // Quando o navegador recusa o bloqueio, o layout gira dentro da página.
+  }
+  resizeBoardForViewport();
+}
+fullscreenBtn.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', resizeBoardForViewport);
 window.addEventListener('resize', resizeBoardForViewport);
 window.addEventListener('orientationchange', resizeBoardForViewport);
 
 function resizeBoardForViewport() {
-  const fullscreen =
-    document.fullscreenElement === game ||
-    game.classList.contains('fallback-fullscreen');
-
-  if (fullscreen) {
-    const availableHeight = Math.max(
-      120,
-      window.innerHeight - 150
-    );
-
-    const widthFromHeight =
-      availableHeight * COLS / ROWS;
-
-    const availableWidth = Math.max(
-      120,
-      window.innerWidth - 16
-    );
-
-    canvas.style.width =
-      `${Math.min(availableWidth, widthFromHeight)}px`;
-
-    canvas.style.maxWidth = 'none';
-  } else {
-    canvas.style.width = '100%';
-    canvas.style.maxWidth = `${COLS * CELL}px`;
-  }
+  const active = isFullscreen();
+  game.classList.toggle('rotated-fullscreen', active && window.innerHeight > window.innerWidth);
+  document.body.classList.toggle('game-fullscreen', active);
+  fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
+  if (!active && screen.orientation?.unlock) screen.orientation.unlock();
 }
 
 // =====================================
@@ -307,8 +238,9 @@ canvas.addEventListener('pointerdown', event => {
 canvas.addEventListener('pointerup', event => {
   if (event.pointerType === 'mouse') return;
 
-  const dx = event.clientX - swipeStartX;
-  const dy = event.clientY - swipeStartY;
+  const rotated = game.classList.contains('rotated-fullscreen');
+  const dx = rotated ? event.clientY - swipeStartY : event.clientX - swipeStartX;
+  const dy = rotated ? swipeStartX - event.clientX : event.clientY - swipeStartY;
 
   if (
     Math.max(Math.abs(dx), Math.abs(dy)) <
@@ -380,6 +312,8 @@ let food = {
 
 let obstacles = [];
 let obstaclePhase = 0;
+let scenePhase = 0;
+let currentSpeed = 175;
 
 let score = 0;
 let timer = null;
@@ -540,11 +474,13 @@ function startGame() {
 
   obstacles = [];
   obstaclePhase = 0;
+  scenePhase = 0;
+  currentSpeed = settings[difficulty].speed;
 
   const count = settings[difficulty].obstacles;
   generateObstacles(count);
 
-  placeFood();
+  if (!placeFood()) return;
 
   scoreEl.textContent = score;
 
@@ -565,7 +501,7 @@ function startGame() {
 
   timer = setInterval(
     tick,
-    settings[difficulty].speed
+    currentSpeed
   );
 }
 
@@ -635,7 +571,9 @@ function generateObstacles(count) {
       !onFood &&
       !onExisting &&
       !tooCloseAhead &&
-      !closeToHead
+      !closeToHead &&
+      !obstacles.some(o => same(o, p)) &&
+      connectedArena([...generated, p])
     ) {
       generated.push(p);
     }
@@ -647,26 +585,65 @@ function generateObstacles(count) {
 // POSICIONAR O HAMBÚRGUER
 // =====================================
 
+const steps = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
+const cellKey = p => p.y * COLS + p.x;
+const inside = p => p.x >= 0 && p.x < COLS && p.y >= 0 && p.y < ROWS;
+
+// Não permite ilhas ou becos sem saída criados pelas pedras.
+function connectedArena(rocks) {
+  const blocked = new Set(rocks.map(cellKey));
+  const seen = new Set([cellKey(snake[0])]);
+  const queue = [snake[0]];
+  for (let i = 0; i < queue.length; i++) {
+    const cell = queue[i];
+    const neighbors = steps.map(d => ({x: cell.x+d.x, y: cell.y+d.y}))
+      .filter(p => inside(p) && !blocked.has(cellKey(p)));
+    if (neighbors.length < 2) return false;
+    for (const p of neighbors) if (!seen.has(cellKey(p))) {
+      seen.add(cellKey(p)); queue.push(p);
+    }
+  }
+  return seen.size === COLS * ROWS - rocks.length;
+}
+
 function placeFood() {
-  let p;
-  let tries = 0;
-
-  do {
-    p = {
-      x: Math.floor(Math.random() * COLS),
-      y: Math.floor(Math.random() * ROWS)
-    };
-
-    tries++;
-  } while (
-    tries < 2000 &&
-    (
-      snake.some(s => same(s, p)) ||
-      obstacles.some(o => same(o, p))
-    )
-  );
-
-  food = p;
+  // Cada candidato possui um caminho sem atravessar o corpo e espaço para
+  // continuar depois de comer. A simulação inclui o crescimento da cobra.
+  const blocked = new Set([...obstacles, ...snake.slice(1)].map(cellKey));
+  const parents = new Map([[cellKey(snake[0]), null]]);
+  const queue = [snake[0]];
+  for (let i = 0; i < queue.length; i++) {
+    for (const d of steps) {
+      if (i === 0 && d.x === -direction.x && d.y === -direction.y) continue;
+      const p = {x: queue[i].x+d.x, y: queue[i].y+d.y};
+      const key = cellKey(p);
+      if (!inside(p) || blocked.has(key) || parents.has(key)) continue;
+      parents.set(key, queue[i]); queue.push(p);
+    }
+  }
+  const candidates = queue.slice(1);
+  while (candidates.length) {
+    const index = Math.floor(Math.random()*candidates.length);
+    const candidate = candidates.splice(index, 1)[0];
+    const path = [];
+    for (let p = candidate; parents.get(cellKey(p)); p = parents.get(cellKey(p))) path.push(p);
+    const body = snake.map(p => ({...p}));
+    for (const p of path.reverse()) {
+      body.unshift(p);
+      if (!same(p, candidate)) body.pop();
+    }
+    const occupied = new Set([...obstacles, ...body.slice(1, -1)].map(cellKey));
+    const escape = steps.some(d => {
+      const p = {x:candidate.x+d.x, y:candidate.y+d.y};
+      return inside(p) && !occupied.has(cellKey(p));
+    });
+    if (escape) { food = candidate; return true; }
+  }
+  food = null;
+  endGame();
+  document.getElementById('overlayTitle').textContent = 'Tabuleiro concluído!';
+  document.getElementById('overlayText').textContent = 'Não há espaço seguro para outro hambúrguer.';
+  return false;
 }
 
 // =====================================
@@ -709,9 +686,8 @@ function tick() {
     score += 10;
     scoreEl.textContent = score;
 
-    // Aos 500 pontos, trocar os obstáculos uma única vez.
-    if (score >= 30 && obstaclePhase === 0) {
-      obstaclePhase = 1;
+    if (score % 30 === 0) {
+      obstaclePhase++;
       generateObstacles(settings[difficulty].obstacles);
     }
 
@@ -723,20 +699,12 @@ function tick() {
       localStorage.setItem('bobSnakeBest', best);
     }
 
-    placeFood();
-
-    // Aumentar a velocidade a cada 50 pontos
-    if (
-      score > 0 &&
-      score % 50 === 0 &&
-      settings[difficulty].speed > 55
-    ) {
+    if (!placeFood()) { draw(); return; }
+    if (score % 100 === 0) {
+      scenePhase = Math.floor(score / 100);
+      currentSpeed = Math.max(40, settings[difficulty].speed * Math.pow(0.95, scenePhase));
       clearInterval(timer);
-
-      timer = setInterval(
-        tick,
-        settings[difficulty].speed - 8
-      );
+      timer = setInterval(tick, currentSpeed);
     }
   } else {
     // Remover a cauda se não comeu
@@ -909,6 +877,7 @@ function endGame() {
 
 function goMenu() {
   clearInterval(timer);
+  if (isFullscreen()) leaveFullscreen();
 
   overlay.classList.add('hidden');
   game.classList.add('hidden');
@@ -937,8 +906,9 @@ function draw() {
     canvas.height
   );
 
-  grad.addColorStop(0, '#0a78ad');
-  grad.addColorStop(1, '#064d83');
+  const sceneHue = (200 + scenePhase * 47) % 360;
+  grad.addColorStop(0, `hsl(${sceneHue}, 85%, 36%)`);
+  grad.addColorStop(1, `hsl(${(sceneHue + 18) % 360}, 85%, 20%)`);
 
   ctx.fillStyle = grad;
 
@@ -993,7 +963,7 @@ function draw() {
   });
 
   // Hambúrguer
-  drawFood(food.x * CELL, food.y * CELL);
+  if (food) drawFood(food.x * CELL, food.y * CELL);
 
   // Cobra
   snake.forEach((s, i) => {
@@ -1007,25 +977,25 @@ function draw() {
 
 function drawRock(x, y, i) {
   // Depois de 500 pontos, as pedras mudam de aparência.
-  ctx.fillStyle = obstaclePhase ? '#5a1d58' : '#123f68';
+  const hue = (210 + obstaclePhase * 67) % 360;
+  const saturation = Math.min(100, 20 + obstaclePhase * 12);
+  ctx.fillStyle = `hsl(${hue}, ${saturation}%, 22%)`;
 
   roundRect(x + 2, y + 3, 16, 15, 5);
   ctx.fill();
 
-  ctx.fillStyle = obstaclePhase
-    ? (i % 2 ? '#b64c9c' : '#d66bb5')
-    : (i % 2 ? '#657e9b' : '#8197ac');
+  ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${48 + i % 2 * 8}%)`;
 
   roundRect(x + 2, y + 1, 16, 15, 5);
   ctx.fill();
 
-  ctx.fillStyle = obstaclePhase ? '#ffd1f0' : '#a6b7c4';
+  ctx.fillStyle = `hsl(${hue}, ${saturation}%, 80%)`;
 
   ctx.beginPath();
   ctx.arc(x + 7, y + 5, 2, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = obstaclePhase ? '#7b286d' : '#4b6887';
+  ctx.strokeStyle = `hsl(${hue}, ${saturation}%, 30%)`;
 
   ctx.beginPath();
   ctx.moveTo(x + 5, y + 12);

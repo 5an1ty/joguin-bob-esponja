@@ -676,11 +676,11 @@ function updateCharacterChoices() {
   }
   if(gameMode!=='battle' && character==='sandy') character='bob';
   document.querySelectorAll('[data-character]').forEach(button=>{
-    button.hidden=button.dataset.character==='sandy' && gameMode!=='battle';
+    button.hidden=false;
     const selected=button.dataset.character===character;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));
     button.querySelector('small').textContent=gameMode==='battle'
       ? ({bob:'Espátula: hambúrguer amarelo · recarga 30s',patrick:'Bomba na arena inteira · recarga 1 abate · imune a bombas',sandy:'Karatê: 2 usos iniciais · +1 a cada 2 abates · máximo 3'})[button.dataset.character]
-      : ({bob:'O otimista da Fenda',patrick:'O amigo estrela-do-mar'})[button.dataset.character] || '';
+      : ({bob:'Otimismo de sobra',patrick:'Amigo de aventuras',sandy:'Exclusiva da Batalha'})[button.dataset.character] || '';
   });
 }
 
@@ -1031,6 +1031,7 @@ updateBestDisplay();
 document.querySelectorAll('.character').forEach(btn => {
   btn.addEventListener('click', () => {
     if(btn.hidden) return;
+    if(btn.dataset.character==='sandy' && gameMode!=='battle') document.querySelector('[data-mode="battle"]').click();
     character = btn.dataset.character;
 
     document.querySelectorAll('.character').forEach(b => {

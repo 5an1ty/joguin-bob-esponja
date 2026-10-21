@@ -231,13 +231,13 @@ let dragPointer = null;
 let dragAnchor = null;
 const SWIPE_THRESHOLD = 12;
 canvas.addEventListener('pointerdown', event => {
-  if(event.pointerType==='mouse' || paused || over) return;
+  if(event.pointerType==='mouse' || paused || over || mobileControlMode!=='swipe') return;
   event.preventDefault();
   dragPointer=event.pointerId;dragAnchor={x:event.clientX,y:event.clientY};
   try{canvas.setPointerCapture(event.pointerId);}catch{}
 });
 canvas.addEventListener('pointermove', event => {
-  if(event.pointerId!==dragPointer || !dragAnchor || paused || over)return;
+  if(event.pointerId!==dragPointer || !dragAnchor || paused || over || mobileControlMode!=='swipe')return;
   event.preventDefault();
   const dx=event.clientX-dragAnchor.x,dy=event.clientY-dragAnchor.y;
   if(Math.max(Math.abs(dx),Math.abs(dy))<SWIPE_THRESHOLD)return;
@@ -296,8 +296,8 @@ let mobileGameplay = false;
 function configureGrid() {
   const mobile = matchMedia(mobileBoardQuery).matches;
   mobileGameplay = mobile;
-  COLS = mobile ? 16 : 30;
-  ROWS = mobile ? Math.max(14,Math.min(28,Math.round(16*(innerHeight-(gameMode==='battle'?180:110))/Math.max(280,innerWidth-16)))) : 21;
+  const dimensions=mobile?mobileGridSize(innerWidth,innerHeight):{cols:30,rows:21};
+  COLS=dimensions.cols;ROWS=dimensions.rows;
   BOARD_WIDTH = COLS * CELL;
   BOARD_HEIGHT = ROWS * CELL;
   canvas.style.aspectRatio = `${COLS} / ${ROWS}`;
@@ -1129,6 +1129,7 @@ function startGame(options={}) {
   directionQueue = [];
   clearPadPointer();
   clearCanvasDrag();
+  resetMobileInput();
   plankton = null;
   battleEnemies = [];
   battleWave = 0;
@@ -1391,7 +1392,7 @@ function tryPlaceSafeFood() {
       const p = wrap({x:candidate.x+d.x, y:candidate.y+d.y});
       return !occupied.has(cellKey(p));
     });
-    if (escape) {
+    if (escape && !foodUnderMobileControls(candidate)) {
       food = {...candidate, id: ++foodSerial, type: chooseFoodType()};
       return true;
     }
@@ -1643,6 +1644,7 @@ function togglePause() {
   }
   clearPadPointer();
   clearCanvasDrag();
+  resetMobileInput();
   paused = !paused;
   if (!paused) scheduleTick((1-pausedProgress)*currentSpeed);
   document.getElementById('pauseBtn').setAttribute('aria-label',paused ? 'Retomar jogo' : 'Pausar jogo');
@@ -1681,6 +1683,7 @@ function togglePause() {
 function endGame() {
   if (over) return;
   stopMovementGuide();
+  resetMobileInput();
   playEffect('death');
   over = true;
   clearPadPointer();
@@ -1719,6 +1722,7 @@ function goMenu() {
   abortPlayableTutorial();
   stopMovementGuide();
   clearCanvasDrag();
+  resetMobileInput();
   stopEffects();
   clearPadPointer();
   cancelAnimationFrame(animationFrame);
@@ -1749,6 +1753,7 @@ function syncCanvasResolution() {
 }
 
 function fitFullscreenBoard() {
+  if(isFullscreen() && matchMedia(mobileBoardQuery).matches){mobileGameplay=true;fitMobileFullscreenBoard();return;}
   if (!isFullscreen()) { syncCanvasResolution(); return; }
   const bounds = game.getBoundingClientRect();
   const pad = directionPad.getBoundingClientRect();
@@ -1762,6 +1767,7 @@ function fitFullscreenBoard() {
   let bottom = pad.height && !sidePad ? pad.top-bounds.top-18 : bounds.height-18;
   if(gameMode==='battle' && !pad.height) bottom=Math.min(bottom,document.getElementById('abilityBtn').getBoundingClientRect().top-bounds.top-16);
   if(portable) bottom=Math.min(bottom,bounds.height-(gameMode==='battle'?100:12));
+  else bottom=Math.min(bottom,document.querySelector('.mobile-dock').getBoundingClientRect().top-bounds.top-12);
   const availableHeight = Math.max(80,bottom-top);
   const frame = document.querySelector('.board-wrap');
   const style = getComputedStyle(frame);

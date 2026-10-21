@@ -37,14 +37,14 @@ class MobileInterfaceTests(unittest.TestCase):
     page.set_viewport_size({'width':width,'height':height})
     page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport();clearTimeout(timer)")
     page.wait_for_timeout(100)
-    box=page.locator('.board-wrap').bounding_box();header=page.locator('.game-head').bounding_box();power=page.locator('#abilityBtn').bounding_box()
-    assert box['y']>=header['y']+header['height'],(width,box,header)
-    assert box['y']+box['height']<=power['y'],(width,box,power)
-    assert power['width']>=width-30 and power['height']>=64
+    box=page.locator('.board-wrap').bounding_box()
+    assert abs(box['width']-width)<1 and abs(box['height']-height)<1 and abs(box['x'])<1 and abs(box['y'])<1
+    assert page.locator('#abilityBtn').is_hidden()
     assert page.locator('.touch-controls').is_hidden()
-    controls=[page.locator(x).bounding_box() for x in ['#restartBtn','#topPauseBtn','#fullscreenBtn']]
-    assert all(x['y']+x['height']<box['y'] and x['x']>=0 and x['x']+x['width']<=width for x in controls),(width,controls,box)
-    assert page.locator('#abilityBtn').evaluate("el=>el.classList.contains('ability-ready')")
+    pause=page.locator('#topPauseBtn').bounding_box()
+    assert pause['y']>height-90 and pause['width']>=220
+    controls=[page.locator(x).bounding_box() for x in ['#restartBtn','#fullscreenBtn']]
+    assert all(x['y']<60 and x['x']>=0 and x['x']+x['width']<=width for x in controls)
    page.set_viewport_size({'width':390,'height':844});page.evaluate('resizeBoardForViewport()');page.wait_for_timeout(100)
   
    # Restart is immediate even when paused and does not enter onboarding.

@@ -235,7 +235,8 @@ class GameTests(unittest.TestCase):
             board=self.page.locator('#board').bounding_box()
             header=self.page.locator('.game-head').bounding_box()
             self.assertGreater(board['height'],100)
-            self.assertGreaterEqual(board['y'],header['y']+header['height'])
+            self.assertAlmostEqual(board['y'],0,delta=1)
+            self.assertAlmostEqual(board['height'],height,delta=1)
             self.assertTrue(self.page.locator('.touch-controls').is_hidden())
             self.assertGreaterEqual(self.page.locator('#topPauseBtn').bounding_box()['height'],44)
             self.page.evaluate('leaveFullscreen()')
@@ -302,7 +303,7 @@ class GameTests(unittest.TestCase):
                 page.evaluate("clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
                 page.wait_for_function('''() => {
                   const r=canvas.getBoundingClientRect();
-                  return Math.abs(r.width/r.height-COLS/ROWS)<.005 &&
+                  return Math.abs((r.width/r.height)/(COLS/ROWS)-1)<.04 &&
                     Math.abs(canvas.width-r.width*devicePixelRatio)<=1 &&
                     Math.abs(canvas.height-r.height*devicePixelRatio)<=1;
                 }''')
@@ -311,10 +312,10 @@ class GameTests(unittest.TestCase):
                 self.assertEqual(page.locator('.effect-badge').count(),3)
                 board=page.locator('#board').bounding_box()
                 hud=page.locator('.status-bar').bounding_box()
-                self.assertAlmostEqual(board['width']/board['height'],page.evaluate('COLS/ROWS'),delta=.005)
+                self.assertAlmostEqual(board['width']/board['height'],page.evaluate('COLS/ROWS'),delta=page.evaluate('COLS/ROWS')*.04)
                 if height>width:
-                    self.assertGreater(board['y'],hud['y']+hud['height'])
-                    self.assertLessEqual(board['y']+board['height'],height-10)
+                    self.assertAlmostEqual(board['y'],0,delta=1)
+                    self.assertAlmostEqual(board['y']+board['height'],height,delta=1)
                     self.assertTrue(page.locator('.touch-controls').is_hidden())
                 self.assertIn('ATIVO',page.locator('#powerStatus').inner_text())
             finally:
@@ -352,7 +353,9 @@ class GameTests(unittest.TestCase):
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         hint=self.page.locator('#foodHint').bounding_box()
         board=self.page.locator('#board').bounding_box()
-        self.assertLess(hint['y']+hint['height'],board['y'])
+        self.assertGreaterEqual(hint['y'],board['y'])
+        self.assertLess(hint['y']+hint['height'],board['y']+110)
+        self.check("assert(placeFood() && !foodUnderMobileControls(food),'food avoids top hint');")
         self.assertEqual(self.page.locator('#foodHint').evaluate('(el)=>getComputedStyle(el).pointerEvents'),'none')
 
     def test_plankton_health_bar_loses_life_without_visible_numbers(self):
@@ -389,17 +392,18 @@ class GameTests(unittest.TestCase):
           } finally {ctx.moveTo=original;}
         ''')
 
-    def test_mobile_map_uses_available_area_above_controls(self):
+    def test_mobile_map_fills_screen_with_optional_power_control(self):
         self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("gameMode='battle';startGame();clearTimeout(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate("gameMode='battle';showMobilePower=true;applyControlPreferences();startGame();clearTimeout(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         board=self.page.locator('#board').bounding_box()
         power=self.page.locator('#abilityBtn').bounding_box()
-        self.assertGreater(board['width'],300)
-        self.assertGreater(board['height'],500)
-        self.assertAlmostEqual(board['width']/board['height'],self.page.evaluate('COLS/ROWS'),delta=.005)
-        self.assertLess(board['y']+board['height'],power['y'])
+        pause=self.page.locator('#topPauseBtn').bounding_box()
+        self.assertAlmostEqual(board['width'],390,delta=1)
+        self.assertAlmostEqual(board['height'],844,delta=1)
         self.assertGreaterEqual(power['width'],360)
+        self.assertLess(power['y']+power['height'],pause['y'])
+        self.check("assert(placeFood() && !foodUnderMobileControls(food),'food remains visible');")
 
     def test_map_geometry_stable_on_power_pickup_and_expiry(self):
         for width,height in [(1366,768),(390,844),(360,640),(844,390)]:
@@ -481,7 +485,7 @@ class GameTests(unittest.TestCase):
               const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
               for(const level of ['easy','medium','hard']) {
                 difficulty=level;startGame();if(paused)togglePause();clearInterval(timer);
-                assert(COLS===16 && ROWS>=14 && ROWS<=28,'adaptive mobile grid');
+                assert(COLS===14 && ROWS===mobileGridSize(innerWidth,innerHeight).rows,'adaptive mobile grid');
                 assert(obstacles.length===obstacleCount() && connectedArena(obstacles),'obstacle density and connectivity');
                 for(let i=0;i<10;i++) {
                   assert(placeFood() && food.x<COLS && food.y<ROWS,'food inside reduced grid');
@@ -569,9 +573,10 @@ class GameTests(unittest.TestCase):
             self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
             pause=self.page.locator('#topPauseBtn').bounding_box()
             leave=self.page.locator('#fullscreenBtn').bounding_box()
-            self.assertGreater(pause['x'],width-310)
-            self.assertLessEqual(pause['y'],25)
-            self.assertTrue(leave['x']>=pause['x']+pause['width'] or leave['x']+leave['width']<=pause['x'])
+            self.assertGreater(pause['width'],200)
+            if width<=900:
+                self.assertGreater(pause['y'],height-100)
+                self.assertLessEqual(leave['y'],25)
             opacity=float(self.page.locator('#powerStatus').evaluate('(el)=>getComputedStyle(el).opacity'))
             self.assertGreaterEqual(opacity,.75)
             self.assertLessEqual(opacity,.85)
@@ -726,7 +731,7 @@ class GameTests(unittest.TestCase):
         self.page.wait_for_function('document.fullscreenElement === game')
         self.page.wait_for_function('''() => {
           const r=canvas.getBoundingClientRect();
-          return Math.abs(r.width/r.height-COLS/ROWS)<.005 &&
+          return Math.abs((r.width/r.height)/(COLS/ROWS)-1)<.04 &&
             Math.abs(canvas.width-r.width*devicePixelRatio)<=1;
         }''')
         self.page.locator('#topPauseBtn').click()
@@ -1013,6 +1018,7 @@ class GameTests(unittest.TestCase):
         self.page.locator('#fullscreenBtn').click()
         self.page.wait_for_function('document.fullscreenElement || game.classList.contains("fallback-fullscreen")')
         self.check("assert(!paused,'fullscreen continues match');")
+        self.page.evaluate('showMobilePower=true;applyControlPreferences()')
         self.page.locator('#abilityBtn').click()
         self.check("assert(food.type==='super' && abilityReadyAt>gameTime,'mobile power button');")
 
@@ -1149,7 +1155,7 @@ class GameTests(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-mode="battle"]').get_attribute('aria-pressed'),'true')
         self.page.locator('#startBtn').click()
         self.page.evaluate("if(paused)togglePause()")
-        self.check("assert(gameMode==='battle' && battleEnemies.length===1 && COLS===16,'mobile battle start');")
+        self.check("assert(gameMode==='battle' && battleEnemies.length===1 && COLS===14,'mobile battle start');")
 
     def test_all_five_music_files_decode_in_browser(self):
         self.page.evaluate("""async () => {

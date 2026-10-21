@@ -89,8 +89,12 @@ restauração do personagem/dificuldade e ausência de alterações nos recordes
 Também cobrem o destaque do primeiro hambúrguer e a dica após dois abates,
 com ativação gratuita de Bob, Patrick e Sandy e indicação própria no mobile.
 
-## Interface mobile por gestos
+## Controles mobile e tela cheia
 
-O mobile agora começa sem pausa, usa arrasto contínuo sobre o canvas e não exibe D-Pad. A grade é adaptada no início da partida e permanece estável durante rotações. Os controles de reinício, pausa e tela cheia ficam acima do mapa; o poder ocupa o rodapé na Batalha.
+O celular inicia com arrasto contínuo. O menu permite escolher Arrastar, Joystick ou D-Pad, com preferências salvas no navegador. Dois toques rápidos no mapa ativam o poder na Batalha; o botão é opcional. Pausa/continuar fica grande na parte inferior, e reinício imediato e tela cheia ficam no topo.
 
-`test_mobile_ui.py` verifica quatro tamanhos de tela, gesto com várias curvas e cancelamento, guia inicial sem pausa e sem perda de pontuação, brilho do poder disponível, reinício imediato e demonstração antes da prática no treino.
+Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo menor e adapta o eixo maior, inclusive nas rotações. O corpo é remapeado mantendo continuidade; se a nova área não comportar todo o corpo sem sobreposição, apenas a cauda excedente é reduzida. Pontuação, poderes e progresso dos inimigos são mantidos. A comida evita as áreas cobertas pelos controles.
+
+`test_control_options.py` valida os três controles, persistência, joystick e D-Pad com área de toque ampliada, poder por toque duplo, rejeição de arrasto/toque longo, doze combinações de tela/controle, reorganização segura, pausa inferior e reinício imediato.
+
+`test_mobile_ui.py` valida arrasto contínuo e cancelamento, guia inicial sem pausa e sem perda de pontos, e as cinco demonstrações automáticas do treino de Batalha antes da prática.

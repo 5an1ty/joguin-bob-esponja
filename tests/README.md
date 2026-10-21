@@ -26,3 +26,7 @@ As regressões do HUD verificam a explicação do hambúrguer fora do mapa, a ba
 vida sem números, os raios partindo dos dois olhos e a folga abaixo do direcional.
 A orientação e o comportamento da tela cheia em aparelhos reais devem ser
 conferidos também no navegador do dispositivo.
+
+Os testes da sobreposição garantem que coletar/expirar poderes não altera a
+posição ou tamanho do mapa em mobile e PC, com e sem tela cheia, e que a
+indicação muda de canto para evitar a cabeça sem interceptar os controles.

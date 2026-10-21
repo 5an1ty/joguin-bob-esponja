@@ -379,6 +379,41 @@ class GameTests(unittest.TestCase):
         self.assertGreaterEqual(844-(pad['y']+pad['height']),55)
         self.assertLess(board['y']+board['height'],pad['y'])
 
+    def test_map_geometry_stable_on_power_pickup_and_expiry(self):
+        for width,height in [(1366,768),(390,844),(360,640),(844,390)]:
+            for fullscreen in [False,True]:
+                self.page.set_viewport_size({'width':width,'height':height})
+                self.page.evaluate('''full => {
+                  game.classList.toggle('fallback-fullscreen',full);
+                  powers={};updateStatus();resizeBoardForViewport();
+                }''',fullscreen)
+                self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                baseline=self.page.locator('#board').bounding_box()
+                for kind in ['ghost','drill','super','magnet',None]:
+                    self.page.evaluate('''type => {
+                      if(type) {food={...snake[0],type};collectFood();clearInterval(timer);}
+                      else powers={};
+                      updateStatus();
+                    }''',kind)
+                    self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    current=self.page.locator('#board').bounding_box()
+                    for key in ['x','y','width','height']:
+                        self.assertAlmostEqual(current[key],baseline[key],delta=.1,msg=f'{width}x{height} fullscreen={fullscreen}, power={kind}, {key}')
+                    self.assertEqual(self.page.locator('#powerStatus').is_visible(),kind is not None)
+
+    def test_power_overlay_avoids_character_and_does_not_capture_input(self):
+        self.check('''
+          powers={ghost:8000};obstacles=[];food={x:15,y:10,type:'normal'};
+          snake=[{x:0,y:0}];powerStatus.dataset.corner='top-left';updateStatus();
+          assert(powerStatus.closest('.board-wrap'),'overlay inside map');
+          assert(powerStatus.dataset.corner!=='top-left','avoids head');
+          const corner=powerStatus.dataset.corner;
+          snake=[{x:corner.endsWith('right')?29:0,y:corner.startsWith('bottom')?20:0}];
+          updateStatus();assert(powerStatus.dataset.corner!==corner,'moves away as player approaches');
+          assert(getComputedStyle(powerStatus).pointerEvents==='none','input passes through');
+          powers={};updateStatus();assert(powerStatus.hidden,'hide without powers');
+        ''')
+
     def test_native_fullscreen_and_exit_to_menu(self):
         self.page.locator('#fullscreenBtn').click()
         self.page.wait_for_function('document.fullscreenElement === game')

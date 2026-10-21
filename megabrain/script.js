@@ -370,6 +370,7 @@ function updateStatus() {
   foodHint.style.setProperty('--food-color', foodTypes[type].color);
   const active = Object.keys(powers).filter(hasPower);
   const key = active.join(',');
+  powerStatus.hidden = active.length === 0;
   // Mantém os cartões no DOM durante a contagem, sem recriá-los a cada passo.
   if (powerStatus.dataset.activePowers !== key) {
     powerStatus.dataset.activePowers = key;
@@ -381,7 +382,9 @@ function updateStatus() {
       badge.dataset.power = type;
       badge.style.setProperty('--effect-color', effect.color);
       const title = document.createElement('strong');
-      title.textContent = `${effect.icon} ${effect.label}`;
+      const shortLabels = {ghost:'Atravessa corpo',drill:'Atravessa pedras',super:'Imune + turbo',magnet:'Atrai comida'};
+      title.textContent = `${effect.icon} ${shortLabels[type]}`;
+      badge.title = effect.label;
       const remaining = document.createElement('span');
       const meter = document.createElement('progress');
       meter.max = effect.duration;
@@ -405,6 +408,34 @@ function updateStatus() {
     ? `👁 Plankton · ${plankton.stunnedUntil > gameTime ? 'PARALISADO' : 'PERSEGUINDO!'}`
     : defeated ? 'PLANKTON DERROTADO · +50 PONTOS' : 'Bordas livres ↔ ↕';
   if (bossStatus.textContent !== bossLabel) bossStatus.textContent = bossLabel;
+  positionPowerHud();
+}
+
+// A indicação flutua sobre o canvas sem participar das medidas do tabuleiro.
+function positionPowerHud() {
+  if (powerStatus.hidden || !snake.length) return;
+  const board = canvas.getBoundingClientRect();
+  if (!board.width || !board.height) return;
+  const width = (powerStatus.offsetWidth + 12) * COLS / board.width;
+  const height = (powerStatus.offsetHeight + 12) * ROWS / board.height;
+  const targets = [
+    ...snake.map((p,i) => ({...p,weight:i === 0 ? 150 : 3})),
+    {...wrap({x:snake[0].x+direction.x,y:snake[0].y+direction.y}),weight:150},
+    ...(food ? [{...food,weight:100}] : []),
+    ...(plankton ? [{...plankton,weight:100}] : []),
+    ...obstacles.map(p => ({...p,weight:1}))
+  ];
+  const corners = ['top-left','top-right','bottom-left','bottom-right'];
+  const scores = corners.map(corner => {
+    const left = corner.endsWith('left') ? 0 : COLS-width;
+    const top = corner.startsWith('top') ? 0 : ROWS-height;
+    return targets.reduce((score,p) => score +
+      (p.x+1>left && p.x<left+width && p.y+1>top && p.y<top+height ? p.weight : 0),0);
+  });
+  const best = scores.indexOf(Math.min(...scores));
+  const current = corners.indexOf(powerStatus.dataset.corner);
+  // Evita ficar trocando de canto por causa de uma única pedra ao fundo.
+  if (current < 0 || scores[current] > scores[best]+2) powerStatus.dataset.corner = corners[best];
 }
 
 function chooseFoodType(roll = Math.random(), powerRoll = Math.random()) {
@@ -1120,6 +1151,7 @@ function fitFullscreenBoard() {
   game.style.setProperty('--map-left',`${margin+(availableWidth-width)/2}px`);
   game.style.setProperty('--map-top',`${top+(availableHeight-height)/2}px`);
   syncCanvasResolution();
+  positionPowerHud();
 }
 
 function interpolateCell(from, to, alpha) {

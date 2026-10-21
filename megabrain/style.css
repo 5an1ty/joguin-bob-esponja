@@ -159,3 +159,36 @@ footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18
   #game.game-panel:is(:fullscreen,.fallback-fullscreen) .status-bar{left:auto;right:6px;width:170px;gap:3px}
   #game.game-panel:is(:fullscreen,.fallback-fullscreen) .food-hint{font-size:10px;padding:3px 5px}
 }
+
+/* A altura do HUD externo é constante: coletar/expirar poderes não desloca o mapa. */
+#game .status-bar{height:88px;min-height:88px;max-height:88px;display:grid;grid-template-columns:1fr;align-content:start;gap:4px}
+#game .status-bar .food-hint{align-self:start}
+#game.game-panel .board-wrap #powerStatus.power-hud{
+  position:absolute;z-index:2;display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr));
+  width:min(76%,320px) !important;max-width:76% !important;max-height:none !important;
+  gap:4px;margin:0 !important;overflow:visible;pointer-events:none;user-select:none;
+}
+#game.game-panel .board-wrap #powerStatus.power-hud[hidden]{display:none !important}
+.power-hud[data-corner=top-left]{top:6px;left:6px;right:auto;bottom:auto}
+.power-hud[data-corner=top-right]{top:6px;right:6px;left:auto;bottom:auto}
+.power-hud[data-corner=bottom-left]{bottom:6px;left:6px;right:auto;top:auto}
+.power-hud[data-corner=bottom-right]{bottom:6px;right:6px;left:auto;top:auto}
+#game.game-panel .board-wrap .power-hud .effect-badge{
+  min-width:0;min-height:0;padding:4px 6px 7px;gap:1px;border-width:1px;border-left-width:3px;
+  background:#082c45b8;box-shadow:none;pointer-events:none;
+}
+#game .power-hud .effect-badge:only-child{grid-column:1/-1}
+#game.game-panel .board-wrap .power-hud .effect-badge strong{font-size:10px;line-height:1.2}
+#game.game-panel .board-wrap .power-hud .effect-badge>span{font-size:9px;line-height:1.2}
+#game .power-hud .effect-badge progress{height:2px}
+.board-wrap>.overlay{z-index:5}
+/* A mudança de dígitos do recorde também não pode quebrar o cabeçalho mobile. */
+@media(max-width:720px){
+  .brand{min-width:0}
+  .brand h1{white-space:nowrap}
+  .brand h1 span{display:block}
+  .best strong{display:inline-block;min-width:4ch;font-variant-numeric:tabular-nums}
+}
+#game.game-panel .board-wrap .power-hud .effect-badge{display:flex;align-items:center;justify-content:space-between;gap:3px;padding:4px 5px 6px}
+#game.game-panel .board-wrap .power-hud .effect-badge strong{font-size:10px;white-space:nowrap}
+#game.game-panel .board-wrap .power-hud .effect-badge>span{font-size:8px;white-space:nowrap;letter-spacing:0}

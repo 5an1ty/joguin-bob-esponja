@@ -186,22 +186,25 @@ function isFullscreen() {
 }
 
 async function leaveFullscreen() {
+  clearFullscreenOrientation();
   if (document.fullscreenElement === game) await document.exitFullscreen();
   game.classList.remove('fallback-fullscreen');
   resizeBoardForViewport();
 }
 
-async function toggleFullscreen() {
+async function toggleFullscreen(orientation=null) {
   if (isFullscreen()) {
     await leaveFullscreen();
     return;
   }
+  if(typeof orientation!=='string' && matchMedia(mobileBoardQuery).matches && ['joystick','swipe'].includes(mobileControlMode)){chooseFullscreenOrientation();return;}
   try {
     if (!game.requestFullscreen) throw new Error('Fullscreen indisponível');
     await game.requestFullscreen();
   } catch {
     game.classList.add('fallback-fullscreen');
   }
+  if(typeof orientation==='string')await applyFullscreenOrientation(orientation);
   resizeBoardForViewport();
 }
 fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -212,6 +215,7 @@ window.addEventListener('orientationchange', resizeBoardForViewport);
 function resizeBoardForViewport() {
   const active = isFullscreen();
   document.body.classList.toggle('game-fullscreen', active);
+  if(typeof updateOrientationHint==='function')updateOrientationHint();
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
   fullscreenBtn.setAttribute('aria-label',active?'Sair da tela cheia':'Entrar em tela cheia');
   fullscreenBtn.title=fullscreenBtn.getAttribute('aria-label');
@@ -1623,6 +1627,7 @@ window.addEventListener('blur', () => clearPadPointer());
 // =====================================
 
 function togglePause() {
+  orientationResumePending=false;
   if(playableTutorial?.explained && paused && !playableTutorial.advancing)return;
   if (over) return;
 

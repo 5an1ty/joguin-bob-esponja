@@ -1016,6 +1016,8 @@ class GameTests(unittest.TestCase):
           }
         """)
         self.page.locator('#fullscreenBtn').click()
+        if self.page.locator('#orientationDialog').is_visible():
+            self.page.locator('[data-orientation=portrait]').click()
         self.page.wait_for_function('document.fullscreenElement || game.classList.contains("fallback-fullscreen")')
         self.check("assert(!paused,'fullscreen continues match');")
         self.page.evaluate('showMobilePower=true;applyControlPreferences()')

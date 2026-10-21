@@ -98,3 +98,5 @@ Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo men
 `test_control_options.py` valida os três controles, persistência, joystick e D-Pad com área de toque ampliada, poder por toque duplo, rejeição de arrasto/toque longo, doze combinações de tela/controle, reorganização segura, pausa inferior e reinício imediato.
 
 `test_mobile_ui.py` valida arrasto contínuo e cancelamento, guia inicial sem pausa e sem perda de pontos, e as cinco demonstrações automáticas do treino de Batalha antes da prática.
+
+`test_orientation.py` verifica a escolha de orientação ao entrar em tela cheia com joystick/arrasto, cancelamento sem perder progresso, solicitação de bloqueio ao navegador, orientação manual quando o bloqueio não está disponível, retomada após girar, joystick à esquerda e troca de posições entre Recomeçar e Continuar no menu de pausa.

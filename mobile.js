@@ -203,4 +203,55 @@ new MutationObserver(()=>{
   abilityButton.classList.toggle('ability-ready',!abilityButton.hidden && !abilityButton.disabled);
 }).observe(abilityButton,{attributes:true,attributeFilter:['disabled','hidden']});
 
+
+// A escolha acontece antes de solicitar tela cheia para preservar a ativação do toque.
+let orientationResumePending=false;
+let preferredFullscreenOrientation=null;
+let orientationDialogWasPlaying=false;
+const orientationDialog=document.createElement('dialog');
+orientationDialog.id='orientationDialog';
+orientationDialog.setAttribute('aria-labelledby','orientationTitle');
+orientationDialog.innerHTML='<h2 id="orientationTitle">Como você quer jogar?</h2><p>Escolha a posição do celular.</p><div class="orientation-options"><button type="button" data-orientation="portrait"><span aria-hidden="true">▯</span>Vertical</button><button type="button" data-orientation="landscape"><span aria-hidden="true">▭</span>Horizontal</button></div><button type="button" id="cancelOrientation">Voltar ao jogo</button>';
+game.append(orientationDialog);
+const orientationHint=document.createElement('p');orientationHint.id='orientationHint';orientationHint.hidden=true;orientationHint.setAttribute('role','status');game.append(orientationHint);
+function chooseFullscreenOrientation(){
+  if(orientationDialog.open)return;
+  orientationDialogWasPlaying=!paused && !over;
+  if(orientationDialogWasPlaying)togglePause();
+  orientationDialog.showModal();
+}
+function cancelFullscreenOrientation(){
+  orientationDialog.close();orientationResumePending=false;
+  if(orientationDialogWasPlaying && paused && !over)togglePause();
+  orientationDialogWasPlaying=false;
+}
+orientationDialog.addEventListener('cancel',event=>{event.preventDefault();cancelFullscreenOrientation();});
+document.getElementById('cancelOrientation').addEventListener('click',cancelFullscreenOrientation);
+orientationDialog.querySelectorAll('[data-orientation]').forEach(button=>button.addEventListener('click',async()=>{
+  orientationDialog.close();
+  orientationResumePending=orientationDialogWasPlaying;
+  orientationDialogWasPlaying=false;
+  await toggleFullscreen(button.dataset.orientation);
+}));
+async function applyFullscreenOrientation(value){
+  preferredFullscreenOrientation=value;
+  try{await screen.orientation?.lock?.(value);}catch{ /* Safari e alguns WebViews exigem rotação manual. */ }
+  updateOrientationHint();
+}
+function clearFullscreenOrientation(){
+  preferredFullscreenOrientation=null;orientationResumePending=false;orientationHint.hidden=true;
+  try{screen.orientation?.unlock?.();}catch{}
+}
+function updateOrientationHint(){
+  if(!isFullscreen()){
+    if(preferredFullscreenOrientation)clearFullscreenOrientation();
+    return;
+  }
+  if(!preferredFullscreenOrientation)return;
+  const matches=preferredFullscreenOrientation==='landscape'?innerWidth>innerHeight:innerHeight>=innerWidth;
+  orientationHint.hidden=matches;
+  orientationHint.textContent=preferredFullscreenOrientation==='landscape'?'Gire o celular para jogar na horizontal.':'Gire o celular para jogar na vertical.';
+  if(matches && orientationResumePending){orientationResumePending=false;if(paused && !over)togglePause();}
+}
+
 applyControlPreferences();

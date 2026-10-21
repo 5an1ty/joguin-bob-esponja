@@ -319,10 +319,11 @@ let gameMode = 'classic';
 let battleWave = 0;
 let battleKills = 0;
 let abilityReadyAt = 0;
-let patrickCharge = 2;
+let patrickCharge = 1;
 let karateArmed = false;
 let sandyUses = 2;
 let sandyRechargeKills = 0;
+let sandyRechargeUnlocked = false;
 let sandyImmuneUntil = 0;
 let abilityAnimation = null;
 let tutorialFirstKillPending = false;
@@ -620,11 +621,11 @@ function updateAbilityButton() {
   button.hidden=gameMode!=='battle';
   let status='Pronto';
   if(character==='bob' && abilityReadyAt>gameTime) status=`${Math.ceil((abilityReadyAt-gameTime)/1000)}s`;
-  if(character==='patrick' && patrickCharge<2) status=`${patrickCharge}/2 abates`;
-  if(character==='sandy') status=karateArmed ? `Karatê armado · ${sandyUses}/3` : `${sandyUses}/3 usos${sandyUses<3?` · ${sandyRechargeKills}/2 abates`:''}`;
+  if(character==='patrick' && patrickCharge<1) status=`${patrickCharge}/1 abate`;
+  if(character==='sandy') status=karateArmed ? `Karatê armado · ${sandyUses}/3` : `${sandyUses}/3 usos${sandyRechargeUnlocked && sandyUses<3?` · Recarga ${sandyRechargeKills}/2 abates`:''}`;
   button.textContent=`Power · ${status}`;
   button.setAttribute('aria-label',`Poder de ${character}: ${status}. Tecla C`);
-  button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<2) || (character==='sandy' && (karateArmed || sandyUses===0));
+  button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<1) || (character==='sandy' && (karateArmed || sandyUses===0));
 }
 function useAbility() {
   if(gameMode!=='battle' || paused || over || !menu.classList.contains('hidden')) return false;
@@ -638,11 +639,13 @@ function useAbility() {
     abilityAnimation={kind:'spatula',from:{...head},startedAt:gameTime,until:gameTime+700};
     playEffect('spatula');
   } else if(character==='patrick') {
-    if(patrickCharge<2 || obstacles.some(o=>same(o,head))) return false;
-    obstacles.push({...head,bomb:true,owner:'patrick'});sceneCacheKey='';patrickCharge=0;playEffect('plantBomb');
+    if(patrickCharge<1 || obstacles.some(o=>same(o,head))) return false;
+    obstacles.push({...head,bomb:true,owner:'patrick'});sceneCacheKey='';patrickCharge=0;
+    abilityAnimation={kind:'star',from:{...head},startedAt:gameTime,until:gameTime+700};
+    playEffect('plantBomb');
   } else {
     if(karateArmed || sandyUses===0) return false;
-    sandyUses--;karateArmed=true;playEffect('karateReady');
+    sandyUses--;if(sandyUses===0)sandyRechargeUnlocked=true;karateArmed=true;playEffect('karateReady');
   }
   updateStatus();return true;
 }
@@ -651,8 +654,8 @@ function showBattleTutorial(stage) {
   document.getElementById('overlayTitle').textContent=stage==='intro'?'Tutorial 1: Controles e Habilidades':'Tutorial 2: Como Funcionam as Ondas';
   const ability={
     bob:'Espátula: aperte C (PC) ou Power (celular) para girar a espátula e criar um hambúrguer amarelo à frente. Recarga: 30 segundos.',
-    patrick:'Bomba especial: aperte C (PC) ou Power (celular) para plantar uma bomba que atinge toda a arena. Você é imune inclusive à colisão dela. Começa pronta; recarrega com 2 abates de outras fontes.',
-    sandy:'Ataque de Karatê: aperte C (PC) ou Power (celular). O próximo golpe causa 2 de dano, paralisa o Plankton e te deixa invencível por 3 segundos. Você começa com 2 usos e recupera 1 a cada 2 abates, até 3 usos.'
+    patrick:'Bomba especial: aperte C (PC) ou Power (celular) para plantar uma bomba que atinge toda a arena. Você é imune às explosões e colisões de todas as bombas. Uma estrela gira ao plantar. Começa pronta; recarrega com 1 abate de outras fontes.',
+    sandy:'Ataque de Karatê: aperte C (PC) ou Power (celular). O próximo golpe causa 2 de dano, paralisa o Plankton e te deixa invencível por 3 segundos. Você começa com 2 usos. Depois de gastar os dois, a recarga é liberada: cada 2 abates recuperam 1 uso, acumulando até 3. A luva gira até atingir um Plankton; Sandy fica transparente durante a imunidade.'
   };
   const items=stage==='intro' ? [ability[character],
     'Armadilhas: bombas no chão explodem quando um Plankton pisa nelas.',
@@ -678,7 +681,7 @@ function updateCharacterChoices() {
     button.hidden=button.dataset.character==='sandy' && gameMode!=='battle';
     const selected=button.dataset.character===character;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));
     button.querySelector('small').textContent=gameMode==='battle'
-      ? ({bob:'Espátula: hambúrguer amarelo · recarga 30s',patrick:'Bomba na arena inteira · recarga 2 abates',sandy:'Karatê: 2 usos iniciais · +1 a cada 2 abates · máximo 3'})[button.dataset.character]
+      ? ({bob:'Espátula: hambúrguer amarelo · recarga 30s',patrick:'Bomba na arena inteira · recarga 1 abate · imune a bombas',sandy:'Karatê: 2 usos iniciais · +1 a cada 2 abates · máximo 3'})[button.dataset.character]
       : ({bob:'O otimista da Fenda',patrick:'O amigo estrela-do-mar'})[button.dataset.character] || '';
   });
 }
@@ -735,8 +738,8 @@ function damageBattleEnemy(enemy,damage,stun=3000,source='normal') {
   if(enemy.hits>=enemyMaxHealth(enemy)) {
     battleEnemies=battleEnemies.filter(e=>e!==enemy);
     battleKills++;
-    if(source!=='patrick') patrickCharge=Math.min(2,patrickCharge+1);
-    if(character==='sandy') {
+    if(source!=='patrick') patrickCharge=Math.min(1,patrickCharge+1);
+    if(character==='sandy' && sandyRechargeUnlocked) {
       if(sandyUses<3 && ++sandyRechargeKills>=2) {sandyUses++;sandyRechargeKills=0;}
       if(sandyUses===3) sandyRechargeKills=0;
     }
@@ -1113,7 +1116,7 @@ function startGame() {
   battleEnemies = [];
   battleWave = 0;
   battleKills = 0;
-  abilityReadyAt = 0;patrickCharge = 2;karateArmed = false;sandyUses = 2;sandyRechargeKills = 0;sandyImmuneUntil = 0;abilityAnimation = null;
+  abilityReadyAt = 0;patrickCharge = 1;karateArmed = false;sandyUses = 2;sandyRechargeKills = 0;sandyRechargeUnlocked = false;sandyImmuneUntil = 0;abilityAnimation = null;
   tutorialFirstKillPending = gameMode==='battle' && localStorage.getItem('bobSnakeBattleTutorialSeen')!=='true';
   tutorialKillPending = false;
   if(gameMode!=='battle' && character==='sandy') character='bob';
@@ -1286,7 +1289,7 @@ const torusDistance = (a,b) => {
 
 // Não permite ilhas ou becos sem saída criados pelas pedras.
 function connectedArena(rocks) {
-  const blocked = new Set(rocks.filter(o=>!(character==='patrick' && o.owner==='patrick')).map(cellKey));
+  const blocked = new Set(rocks.filter(o=>!(gameMode==='battle' && character==='patrick' && o.bomb)).map(cellKey));
   const seen = new Set([cellKey(snake[0])]);
   const queue = [snake[0]];
   for (let i = 0; i < queue.length; i++) {
@@ -1367,7 +1370,7 @@ function tick(stepAt = performance.now()) {
   const eatenFood=foods.find(item=>same(head,item)) || foods.find(item=>same(snake[0],item));
   const eating=!!eatenFood;
   if(eatenFood) food=eatenFood;
-  const hitObstacle = obstacles.some(o => same(o,head) && !(character==='patrick' && o.owner==='patrick'));
+  const hitObstacle = obstacles.some(o => same(o,head) && !(gameMode==='battle' && character==='patrick' && o.bomb));
   const body = eating ? snake : snake.slice(0,-1);
   const hitSelf = body.some(s=>same(s,head));
   if ((hitObstacle && !hasPower('drill') && !isInvulnerable()) ||
@@ -1724,7 +1727,8 @@ function paintWrapped(cell, paint) {
 
 function applyCharacterEffect() {
   // Troca visual solicitada: passagem por obstáculos fica translúcida.
-  if(hasPower('drill')) ctx.globalAlpha = .55;
+  if(character==='sandy' && sandyImmuneUntil>gameTime) ctx.globalAlpha = .45;
+  else if(hasPower('drill')) ctx.globalAlpha = .55;
   if(hasPower('ghost')) {ctx.shadowColor = '#bc8cff';ctx.shadowBlur = 7;}
   if(hasPower('super')) {ctx.shadowColor = '#ffe45c';ctx.shadowBlur = 12;}
 }
@@ -1893,7 +1897,7 @@ function draw(alpha = movementProgress(), now = performance.now()) {
   const positions = visualSnakePositions(alpha,now);
   lastVisualPositions = positions;
   ctx.save();
-  ctx.globalAlpha = hasPower('drill') ? .55 : 1;
+  ctx.globalAlpha = character==='sandy' && sandyImmuneUntil>gameTime ? .45 : hasPower('drill') ? .55 : 1;
   ctx.strokeStyle = character === 'bob' ? '#ffd92e' : '#ff829b';
   ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.beginPath();
@@ -1907,6 +1911,7 @@ function draw(alpha = movementProgress(), now = performance.now()) {
   positions.forEach((cell,i) => paintWrapped(cell, (x,y) => {
     paintSnakeSprite(x,y,i);
   }));
+  drawOrbitingGlove(alpha,now);
   drawEyeLaser(alpha,now);
 }
 
@@ -2047,6 +2052,22 @@ function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
   ctx.restore();
 }
 
+function drawOrbitingGlove(alpha,now=performance.now()) {
+  if(gameMode!=='battle' || character!=='sandy' || !karateArmed) return;
+  const head=getVisualHead(alpha,now);
+  const visualTime=gameTime+(!paused && !over?alpha*motionDuration:0);
+  const angle=visualTime/150;
+  const position=wrap({x:head.x+Math.cos(angle)*.9,y:head.y+Math.sin(angle)*.9});
+  paintWrapped(position,(x,y)=>{
+    ctx.save();ctx.translate(x+10,y+10);ctx.rotate(angle+.5);
+    ctx.fillStyle='#e64c54';ctx.strokeStyle='#fff2d4';ctx.lineWidth=1.2;
+    roundRect(-7,-7,13,12,4);ctx.fill();ctx.stroke();
+    roundRect(3,-2,6,7,3);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#f7e9c6';ctx.fillRect(-6,4,10,5);
+    ctx.restore();
+  });
+}
+
 function drawAbilityAnimation(alpha) {
   if(!abilityAnimation || abilityAnimation.until<=gameTime) return;
   const progress=Math.min(1,(gameTime+(!paused?alpha*motionDuration:0)-abilityAnimation.startedAt)/(abilityAnimation.until-abilityAnimation.startedAt));
@@ -2055,6 +2076,9 @@ function drawAbilityAnimation(alpha) {
     if(abilityAnimation.kind==='spatula') {
       ctx.rotate(progress*Math.PI*6);ctx.fillStyle='#a4cddd';ctx.fillRect(0,-1,20,3);ctx.fillStyle='#e8f5fc';ctx.fillRect(16,-5,9,11);
       ctx.strokeStyle='#52788d';for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(18+i*2,-3);ctx.lineTo(18+i*2,4);ctx.stroke();}
+    } else if(abilityAnimation.kind==='star') {
+      ctx.rotate(progress*Math.PI*6);ctx.fillStyle='#ff9bb7';ctx.strokeStyle='#fff2b3';ctx.lineWidth=1.5;
+      ctx.beginPath();for(let i=0;i<10;i++){const radius=i%2?8:19,angle=i*Math.PI/5-Math.PI/2;const x=Math.cos(angle)*radius,y=Math.sin(angle)*radius;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.fill();ctx.stroke();
     } else {ctx.strokeStyle='#fff5b3';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,8+progress*18,-1,1);ctx.stroke();}
     ctx.restore();
   });

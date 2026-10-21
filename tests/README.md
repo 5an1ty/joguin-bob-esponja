@@ -76,3 +76,8 @@ O balanceamento da Batalha cobre os limites das ondas 3 e 6, vida por cor,
 barras proporcionais e raios até a derrota. A recarga da Sandy é validada com
 2 usos iniciais, 1 uso por 2 abates e teto de 3, sem guardar crédito além do teto.
 A velocidade base constante da Batalha e o turbo temporário também são testados.
+
+A recarga da Sandy só é liberada depois de gastar os dois usos iniciais;
+spam sem cargas é bloqueado. Também são verificados a luva enquanto o golpe
+está armado, a transparência na imunidade, a recarga do Patrick com 1 abate
+e sua imunidade à colisão de todas as bombas, preservando a colisão com pedras.

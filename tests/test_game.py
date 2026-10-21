@@ -803,6 +803,41 @@ class GameTests(unittest.TestCase):
           food={...snake[0],type:'red'};collectFood();assert(!battleEnemies.includes(enemy) && beam.defeated,'fifth hit defeats');
         """)
 
+    def test_sandy_initial_uses_gate_recharge_and_orbiting_glove(self):
+        self.check("""
+          gameMode='battle';character='sandy';startGame();clearTimeout(timer);obstacles=[];
+          const kill=()=>{const e={x:0,y:0,hits:0,aggression:1};battleEnemies.push(e);damageBattleEnemy(e,3);};
+          for(let i=0;i<4;i++)kill();
+          assert(sandyUses===2 && sandyRechargeKills===0 && !sandyRechargeUnlocked,'initial kills do not create more uses');
+          assert(useAbility() && sandyUses===1,'first use spent');
+          gameTime+=15000;
+          assert(karateArmed && !useAbility(),'armed attack persists but cannot be stacked');
+          const original=ctx.fillRect;let gloveParts=0;
+          ctx.fillRect=function(...args){gloveParts++;return original.apply(this,args);};
+          try {drawOrbitingGlove(.5);} finally {ctx.fillRect=original;}
+          assert(gloveParts>0,'glove rendered while armed');
+          const e={...snake[0],hits:0,aggression:1};battleEnemies.push(e);
+          resolveEnemyContact(e);assert(!karateArmed && sandyUses===1,'hit consumes armed attack only');
+          ctx.save();applyCharacterEffect();assert(ctx.globalAlpha<.6,'immune Sandy transparent');ctx.restore();
+          assert(useAbility() && sandyUses===0 && sandyRechargeUnlocked,'second use unlocks recharge');
+          karateArmed=false;
+          for(let i=0;i<5;i++)assert(!useAbility(),'zero uses cannot cast');
+          kill();assert(sandyUses===0 && sandyRechargeKills===1,'first recharge kill insufficient');
+          kill();assert(sandyUses===1 && sandyRechargeKills===0 && useAbility(),'second kill grants exactly one use');
+        """)
+
+    def test_patrick_ignores_all_bomb_collisions_but_not_rocks(self):
+        self.check("""
+          for(const [obstacle,survives] of [[{x:9,y:10,bomb:true},true],[{x:9,y:10,bomb:true,owner:'patrick'},true],[{x:9,y:10},false]]) {
+            gameMode='battle';character='patrick';startGame();clearTimeout(timer);battleEnemies=[];
+            obstacles=[obstacle];food={x:0,y:0,type:'normal'};tick();
+            assert(over===!survives,'bomb-only collision immunity');
+            assert(obstacles.includes(obstacle),'walking does not explode bomb');
+          }
+          startGame();clearTimeout(timer);obstacles=[];
+          assert(useAbility() && abilityAnimation.kind==='star','spinning star on planting');draw();
+        """)
+
     def test_sandy_charge_stacks_and_requires_two_kills(self):
         self.check("""
           gameMode='battle';character='sandy';startGame();clearTimeout(timer);obstacles=[];
@@ -870,10 +905,8 @@ class GameTests(unittest.TestCase):
           battleEnemies=[];tick();assert(!over,'own bomb has no collision');
           battleEnemies=[{x:0,y:0,hits:2,aggression:1},{x:15,y:10,hits:2,aggression:1}];
           explodeBomb(bomb);assert(battleKills===2 && patrickCharge===0,'arena blast kills do not recharge');
-          for(let i=0;i<2;i++) {
-            const enemy={x:0,y:0,hits:0,aggression:1};battleEnemies.push(enemy);damageBattleEnemy(enemy,3);
-          }
-          assert(patrickCharge===2,'two other kills recharge');
+          const enemy={x:0,y:0,hits:0,aggression:1};battleEnemies.push(enemy);damageBattleEnemy(enemy,3);
+          assert(patrickCharge===1,'one other kill recharges');
           obstacles=[];assert(useAbility(),'ready again');
         """)
 

@@ -659,7 +659,7 @@ class GameTests(unittest.TestCase):
     def test_effects_are_real_synthesized_waveforms_without_clipping(self):
         result=self.page.evaluate('''async () => {
           const results={};
-          for(const kind of ['collect','laser','death']) {
+          for(const kind of Object.keys(effectNotes)) {
             const context=new OfflineAudioContext(1,30870,44100);
             const output=context.createGain();output.gain.value=.32;output.connect(context.destination);
             scheduleEffectNotes(context,output,kind);
@@ -688,7 +688,7 @@ class GameTests(unittest.TestCase):
             plankton={x:20,y:15,hits:0,stunnedUntil:0};
             food={...snake[0],type:'red'};collectFood();clearTimeout(timer);
             endGame();endGame();
-            assert(events.join(',')==='collect,collect,laser,death','effects attached to the correct events');
+            assert(events.join(',')==='collect,red,laser,death','effects attached to the correct events');
           } finally {playEffect=original;}
         ''')
 
@@ -780,6 +780,57 @@ class GameTests(unittest.TestCase):
           cheatFoods=[];assert(activateBurgerRow(),'opens blocked row');
           assert(!obstacles.some(p=>p.y===cheatFoods[0].y),'rocks cleared from row');
         """)
+
+    def test_power_pickups_and_frost_have_distinct_sound_events(self):
+        self.check("""
+          const events=[],original=playEffect;playEffect=kind=>events.push(kind);
+          try {
+            for(const type of ['normal','ghost','drill','super','magnet','red']) {
+              food={...snake[0],type};collectFood();
+            }
+            assert(events.join(',')==='collect,ghost,drill,super,magnet,red','pickup signatures');
+            gameMode='battle';startGame();clearTimeout(timer);
+            releaseFrostBreath();assert(events.at(-1)==='frost','breath sound');
+            assert(new Set(['collect','ghost','drill','super','magnet','red','frost'].map(k=>JSON.stringify(effectNotes[k]))).size===7,'distinct sounds');
+          } finally {playEffect=original;}
+        """)
+
+    def test_battle_kill_record_persists_separately_from_points(self):
+        self.check("""
+          gameMode='battle';battleBest=0;startGame();clearTimeout(timer);
+          const classicBest=best;
+          const enemy=battleEnemies[0];damageBattleEnemy(enemy,3);
+          assert(battleKills===1 && battleBest===1,'kill count');
+          damageBattleEnemy(enemy,3);assert(battleKills===1,'no double count');
+          assert(localStorage.getItem('bobSnakeBattleBest')==='1','stored record');
+          assert(best===classicBest,'points record separate');
+          updateStatus();assert(bossStatus.textContent.includes('Abates 1') && bossStatus.textContent.includes('Recorde 1'),'visible in game');
+          endGame();assert(document.getElementById('overlayText').textContent.includes('1 Planktons'),'end game result');
+          startGame();clearTimeout(timer);assert(battleKills===0 && battleBest===1,'restart retains record');
+        """)
+        self.page.reload(wait_until='domcontentloaded')
+        self.page.locator('[data-mode="battle"]').click()
+        self.check("assert(battleBest===1 && bestEl.textContent==='1' && document.getElementById('bestLabel').textContent.includes('Batalha'),'record after reload');")
+
+    def test_mobile_speed_is_slower_in_every_difficulty_and_phase(self):
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.check("""
+          for(const level of ['easy','medium','hard']) {
+            difficulty=level;startGame();clearTimeout(timer);
+            assert(mobileGameplay && currentSpeed===settings[level].speed*1.3,'initial mobile speed');
+            let previous=Infinity;
+            for(const phase of [0,1,5,10,100]) {
+              scenePhase=phase;powers={};refreshSpeed();
+              const desktop=Math.max(40,settings[level].speed*Math.pow(.95,phase));
+              assert(Math.abs(currentSpeed-desktop*1.3)<.001 && currentSpeed<=previous,'mobile progression');
+              previous=currentSpeed;
+              powers.super=gameTime+6000;refreshSpeed();
+              assert(Math.abs(currentSpeed-Math.max(25,desktop*.55)*1.3)<.001,'mobile turbo');
+            }
+          }
+        """)
+        self.page.set_viewport_size({'width':1280,'height':900})
+        self.check("difficulty='hard';startGame();clearTimeout(timer);assert(!mobileGameplay && currentSpeed===settings.hard.speed,'desktop unchanged');")
 
     def test_battle_bombs_area_damage_rewards_and_classic_exclusion(self):
         self.check("""

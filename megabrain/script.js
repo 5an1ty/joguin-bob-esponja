@@ -295,8 +295,10 @@ const settings = {
 };
 
 // A grade é escolhida ao iniciar uma partida; girar a tela não muda a lógica em curso.
+let mobileGameplay = false;
 function configureGrid() {
   const mobile = matchMedia(mobileBoardQuery).matches;
+  mobileGameplay = mobile;
   COLS = mobile ? 18 : 30;
   ROWS = mobile ? 18 : 21;
   BOARD_WIDTH = COLS * CELL;
@@ -315,6 +317,7 @@ let character = 'bob';
 let difficulty = 'easy';
 let gameMode = 'classic';
 let battleWave = 0;
+let battleKills = 0;
 let battleBurgers = 0;
 let battleRewards = 0;
 let frostBreath = null;
@@ -426,7 +429,7 @@ function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMov
 
 function refreshSpeed() {
   const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, scenePhase));
-  const speed = hasPower('super') ? Math.max(25, base * 0.55) : base;
+  const speed = (hasPower('super') ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1);
   if (speed !== currentSpeed) {
     currentSpeed = speed;
     clearInterval(timer);
@@ -478,7 +481,7 @@ function updateStatus() {
   bossHealth.max = gameMode==='battle' ? battleProfile(battleWave).count*3 : 3;
   bossHealth.value = enemies.reduce((hp,enemy)=>hp+Math.max(0,3-enemy.hits),0);
   const bossLabel = gameMode==='battle'
-    ? `⚔ Batalha · Onda ${battleWave} · ${enemies.length} Plankton(s) · Agressividade ${battleProfile(battleWave).aggression}`
+    ? `⚔ Onda ${battleWave} · Abates ${battleKills} · Recorde ${battleBest}`
     : plankton
     ? `👁 Plankton · ${plankton.stunnedUntil > gameTime ? 'PARALISADO' : 'PERSEGUINDO!'}`
     : defeated ? 'PLANKTON DERROTADO · +50 PONTOS' : 'Bordas livres ↔ ↕';
@@ -610,8 +613,8 @@ function addScore(amount) {
   const previous = score;
   score += amount;
   scoreEl.textContent = score;
-  if (score > best) {
-    best = score; bestEl.textContent = best;
+  if (gameMode==='classic' && score > best) {
+    best = score; updateBestDisplay();
     localStorage.setItem('bobSnakeBest', best);
   }
   const phase = Math.floor(score / 30);
@@ -634,6 +637,10 @@ function damageBattleEnemy(enemy,damage,stun=3000) {
   }
   if(enemy.hits>=3) {
     battleEnemies=battleEnemies.filter(e=>e!==enemy);
+    battleKills++;
+    if(battleKills>battleBest) {
+      battleBest=battleKills;localStorage.setItem('bobSnakeBattleBest',battleBest);updateBestDisplay();
+    }
     if(enemy.aggression===3) battleRewards++;
     addScore(50);
   }
@@ -649,6 +656,7 @@ function frostVector(from,to) {
 }
 
 function releaseFrostBreath() {
+  playEffect('frost');
   const target=laserTarget();
   snake=snake.slice(0,INITIAL_SNAKE_LENGTH);
   previousSnake=previousSnake.slice(0,INITIAL_SNAKE_LENGTH);
@@ -667,8 +675,8 @@ function releaseFrostBreath() {
 }
 
 function collectFood() {
-  playEffect('collect');
   const type = food.type || 'normal';
+  playEffect(type==='normal' ? 'collect' : type);
   if (activeEnemies().length) bossNextFood = type === 'normal' ? 'red' : 'normal';
   if (foodTypes[type].duration &&
       (hasPower(type) || activePowerTypes().length < MAX_ACTIVE_POWERS)) {
@@ -721,6 +729,12 @@ function updatePlankton() {
 let best = Number(
   localStorage.getItem('bobSnakeBest') || 0
 );
+
+let battleBest = Math.max(0,Number(localStorage.getItem('bobSnakeBattleBest')) || 0);
+function updateBestDisplay() {
+  document.getElementById('bestLabel').textContent=gameMode==='battle' ? '👁 Recorde Batalha' : '🏆 Recorde';
+  bestEl.textContent=gameMode==='battle' ? battleBest : best;
+}
 
 // =====================================
 // MÚSICAS
@@ -794,9 +808,15 @@ function pararMusica() {
   currentMusicKey = null;
 }
 
-// Tons originais: coleta ascendente, laser descendente e queda grave na morte.
+// Efeitos sintetizados originais: cada poder tem sua própria assinatura sonora.
 const effectNotes = {
   collect:[{type:'sine',from:620,to:930,time:.09,at:0},{type:'sine',from:960,to:1320,time:.1,at:.055}],
+  ghost:[{type:'sine',from:900,to:270,time:.28,at:0},{type:'sine',from:1350,to:405,time:.28,at:.06}],
+  drill:[{type:'square',from:180,to:95,time:.08,at:0},{type:'square',from:210,to:110,time:.08,at:.09},{type:'triangle',from:260,to:140,time:.1,at:.18}],
+  super:[{type:'triangle',from:440,to:880,time:.13,at:0},{type:'triangle',from:660,to:1320,time:.13,at:.1},{type:'sine',from:880,to:1760,time:.18,at:.2}],
+  magnet:[{type:'sine',from:220,to:660,time:.12,at:0},{type:'sine',from:240,to:720,time:.12,at:.14},{type:'sine',from:260,to:1040,time:.16,at:.28}],
+  red:[{type:'square',from:700,to:1100,time:.07,at:0},{type:'triangle',from:1100,to:1700,time:.12,at:.08}],
+  frost:[{type:'noise',from:1,to:.3,time:.5,at:0},{type:'sine',from:1800,to:600,time:.35,at:.08},{type:'triangle',from:2200,to:1400,time:.12,at:.36}],
   laser:[{type:'sawtooth',from:1450,to:130,time:.19,at:0}],
   death:[{type:'triangle',from:360,to:65,time:.42,at:0},{type:'sine',from:140,to:45,time:.32,at:.1}]
 };
@@ -832,10 +852,22 @@ function scheduleEffectNotes(context,output,kind) {
   for (const note of effectNotes[kind] || []) {
     if (activeEffects.size>=12) break;
     const at=context.currentTime+note.at;
-    const oscillator=context.createOscillator(), gain=context.createGain();
-    oscillator.type=note.type;
-    oscillator.frequency.setValueAtTime(note.from,at);
-    oscillator.frequency.exponentialRampToValueAtTime(note.to,at+note.time);
+    const gain=context.createGain();
+    let oscillator;
+    if(note.type==='noise') {
+      oscillator=context.createBufferSource();
+      const buffer=context.createBuffer(1,Math.ceil(context.sampleRate*note.time),context.sampleRate);
+      const samples=buffer.getChannelData(0);let seed=37;
+      for(let i=0;i<samples.length;i++) {seed=(seed*16807)%2147483647;samples[i]=(seed/2147483647*2-1)*.65;}
+      oscillator.buffer=buffer;
+      oscillator.playbackRate.setValueAtTime(note.from,at);
+      oscillator.playbackRate.linearRampToValueAtTime(note.to,at+note.time);
+    } else {
+      oscillator=context.createOscillator();
+      oscillator.type=note.type;
+      oscillator.frequency.setValueAtTime(note.from,at);
+      oscillator.frequency.exponentialRampToValueAtTime(note.to,at+note.time);
+    }
     gain.gain.setValueAtTime(.0001,at);
     gain.gain.exponentialRampToValueAtTime(.35,at+.005);
     gain.gain.exponentialRampToValueAtTime(.0001,at+note.time);
@@ -874,7 +906,7 @@ updateMuteButton();
 // RECORDE
 // =====================================
 
-bestEl.textContent = best;
+updateBestDisplay();
 
 // =====================================
 // SELEÇÃO DE PERSONAGEM
@@ -916,6 +948,7 @@ document.querySelectorAll('.difficulty').forEach(btn => {
 
 document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
   gameMode=button.dataset.mode;
+  updateBestDisplay();
   document.querySelectorAll('[data-mode]').forEach(item=>{
     const selected=item===button;item.classList.toggle('selected',selected);item.setAttribute('aria-pressed',String(selected));
   });
@@ -969,6 +1002,7 @@ function startGame() {
   plankton = null;
   battleEnemies = [];
   battleWave = 0;
+  battleKills = 0;
   battleBurgers = 0;
   battleRewards = 0;
   frostBreath = null;
@@ -1006,7 +1040,7 @@ function startGame() {
   obstacles = [];
   obstaclePhase = 0;
   scenePhase = 0;
-  currentSpeed = settings[difficulty].speed;
+  currentSpeed = settings[difficulty].speed * (mobileGameplay ? 1.3 : 1);
 
   const count = obstacleCount();
   generateObstacles(count);
@@ -1033,6 +1067,7 @@ function startGame() {
   lastMoveAt = performance.now();
   inputMotion = null;
   motionDuration = currentSpeed;
+  updateBestDisplay();
   updateStatus();
   resizeBoardForViewport();
   startAnimation();
@@ -1479,7 +1514,9 @@ function endGame() {
     'Fim de jogo!';
 
   document.getElementById('overlayText').textContent =
-    `Você fez ${score} pontos. Tente mais uma vez!`;
+    gameMode==='battle'
+      ? `Você derrotou ${battleKills} Planktons! Recorde: ${battleBest}. Pontuação: ${score}.`
+      : `Você fez ${score} pontos. Tente mais uma vez!`;
 
   document.getElementById('resumeBtn')
     .classList.add('hidden');

@@ -59,3 +59,8 @@ As bombas da Batalha são verificadas quanto à geração exclusiva nesse modo,
 ativação por Plankton, dano em raio de 15 células, recompensa por derrota,
 consumo único, imunidade do jogador à explosão e colisão como obstáculo.
 O cone congelante também cobre inimigos além do antigo limite de 9 células.
+
+Todos os sons de hambúrgueres e do sopro são renderizados em áudio offline para
+verificar sinal e ausência de clipping. A suíte também valida os eventos de cada
+poder, recorde persistente de abates separado da pontuação e velocidade mobile
+reduzida por dificuldade, fase e turbo, mantendo a velocidade original no PC.

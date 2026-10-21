@@ -10,6 +10,8 @@ const bestEl = document.getElementById('best');
 const COLS = 30;
 const ROWS = 21;
 const CELL = 20;
+const BOARD_WIDTH = COLS * CELL;
+const BOARD_HEIGHT = ROWS * CELL;
 
 // =====================================
 // ADAPTAÇÃO PARA WEB MOBILE
@@ -142,7 +144,8 @@ fullscreenStyles.textContent = `
     background: #064d83;
   }
   #game:is(:fullscreen, .fallback-fullscreen) .board-wrap {
-    position: absolute; inset: 0; border: 0; border-radius: 0; box-shadow: none;
+    position: absolute; border: 4px solid #51e1d2; border-radius: 14px;
+    box-shadow: 0 12px 40px #00152580;
   }
   #game:is(:fullscreen, .fallback-fullscreen) #board {
     width: 100% !important; height: 100% !important; max-width: none !important;
@@ -205,6 +208,7 @@ function resizeBoardForViewport() {
   const active = isFullscreen();
   document.body.classList.toggle('game-fullscreen', active);
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
+  requestAnimationFrame(fitFullscreenBoard);
 }
 
 // =====================================
@@ -260,18 +264,24 @@ const settings = {
   easy: {
     label: 'Fácil',
     speed: 175,
+    specialChance: 0.60,
+    bossInterval: 420,
     obstacles: 7
   },
 
   medium: {
     label: 'Médio',
     speed: 120,
+    specialChance: 0.22,
+    bossInterval: 270,
     obstacles: 16
   },
 
   hard: {
     label: 'Difícil',
     speed: 78,
+    specialChance: 0.10,
+    bossInterval: 155,
     obstacles: 29
   }
 };
@@ -320,6 +330,14 @@ let plankton = null;
 let pendingPlanktons = 0;
 let bossMoveTime = 0;
 let beam = null;
+let bossNextFood = 'normal';
+let foodSerial = 0;
+let previousSnake = [];
+let previousFood = null;
+let lastMoveAt = 0;
+let motionDuration = 175;
+let planktonMotion = null;
+let animationFrame = null;
 const powerStatus = document.getElementById('powerStatus');
 const bossStatus = document.getElementById('bossStatus');
 
@@ -336,12 +354,46 @@ function refreshSpeed() {
 }
 
 function updateStatus() {
-  powerStatus.textContent = Object.keys(powers).filter(hasPower).map(type =>
-    `${foodTypes[type].icon} ${foodTypes[type].label} ${Math.ceil((powers[type]-gameTime)/1000)}s`
-  ).join(' · ') || '🍔 Pegue os hambúrgueres coloridos!';
-  bossStatus.textContent = plankton
-    ? `👁 Plankton ${plankton.hits}/3 raios${plankton.stunnedUntil > gameTime ? ' · PARALISADO' : ' · PERSEGUINDO!'}`
+  const active = Object.keys(powers).filter(hasPower);
+  const key = active.join(',');
+  // Mantém os cartões no DOM durante a contagem, sem recriá-los a cada passo.
+  if (powerStatus.dataset.activePowers !== key) {
+    powerStatus.dataset.activePowers = key;
+    powerStatus.replaceChildren();
+    for (const type of active) {
+      const effect = foodTypes[type];
+      const badge = document.createElement('span');
+      badge.className = 'effect-badge';
+      badge.dataset.power = type;
+      badge.style.setProperty('--effect-color', effect.color);
+      const title = document.createElement('strong');
+      title.textContent = `${effect.icon} ${effect.label}`;
+      const remaining = document.createElement('span');
+      const meter = document.createElement('progress');
+      meter.max = effect.duration;
+      meter.setAttribute('aria-label', `Tempo restante: ${effect.label}`);
+      badge.append(title, remaining, meter);
+      powerStatus.append(badge);
+    }
+    if (!active.length) powerStatus.textContent = 'SEM PODER ATIVO · Pegue um hambúrguer colorido';
+  }
+  for (const type of active) {
+    const badge = powerStatus.querySelector(`[data-power="${type}"]`);
+    const label = `ATIVO · ${Math.ceil((powers[type]-gameTime)/1000)}s`;
+    const remaining = badge.querySelector('span');
+    if (remaining.textContent !== label) remaining.textContent = label;
+    badge.querySelector('progress').value = powers[type]-gameTime;
+  }
+  const bossLabel = plankton
+    ? `👁 Plankton ${plankton.hits}/3 raios${plankton.stunnedUntil > gameTime ? ' · PARALISADO' : ' · PERSEGUINDO!'} · Próximo: ${bossNextFood === 'red' ? 'VERMELHO ϟ' : 'NORMAL 🍔'}`
     : 'Bordas livres ↔ ↕';
+  if (bossStatus.textContent !== bossLabel) bossStatus.textContent = bossLabel;
+}
+
+function chooseFoodType(roll = Math.random(), powerRoll = Math.random()) {
+  if (plankton) return bossNextFood;
+  if (roll >= settings[difficulty].specialChance) return 'normal';
+  return ['ghost', 'drill', 'super', 'magnet'][Math.floor(powerRoll * 4)];
 }
 
 function spawnPlankton() {
@@ -356,7 +408,9 @@ function spawnPlankton() {
   if (!cells.length) return;
   plankton = {...cells[Math.floor(Math.random()*cells.length)], hits: 0, stunnedUntil: 0};
   pendingPlanktons--;
-  bossMoveTime = gameTime + 600;
+  bossNextFood = 'normal';
+  planktonMotion = null;
+  bossMoveTime = gameTime + settings[difficulty].bossInterval;
 }
 
 function addScore(amount) {
@@ -380,6 +434,7 @@ function addScore(amount) {
 
 function collectFood() {
   const type = food.type || 'normal';
+  if (plankton) bossNextFood = type === 'normal' ? 'red' : 'normal';
   if (foodTypes[type].duration) powers[type] = gameTime + foodTypes[type].duration;
   if (type === 'red' && plankton) {
     beam = {from: {...snake[0]}, to: {...plankton}, until: gameTime + 400};
@@ -410,8 +465,9 @@ function updatePlankton() {
     const head = snake[0];
     const moves = steps.map(d=>wrap({x:plankton.x+d.x,y:plankton.y+d.y}));
     moves.sort((a,b)=>torusDistance(a,head)-torusDistance(b,head));
+    planktonMotion = {from: {...plankton}, startedAt: performance.now(), duration: settings[difficulty].bossInterval};
     Object.assign(plankton,moves[0]);
-    bossMoveTime = gameTime + 420;
+    bossMoveTime = gameTime + settings[difficulty].bossInterval;
   }
   if (same(plankton,snake[0]) && !hasPower('super')) endGame();
 }
@@ -554,6 +610,9 @@ function startGame() {
   plankton = null;
   pendingPlanktons = 0;
   beam = null;
+  bossNextFood = 'normal';
+  planktonMotion = null;
+  foodSerial = 0;
   food = null;
   paused = false;
   over = false;
@@ -597,10 +656,15 @@ function startGame() {
 
   overlay.classList.add('hidden');
 
-  document.getElementById('pauseBtn').textContent = 'Ⅱ';
+  document.getElementById('pauseBtn').textContent = 'II';
 
+  previousSnake = snake.map(p => ({...p}));
+  previousFood = food && {...food};
+  lastMoveAt = performance.now();
+  motionDuration = currentSpeed;
   updateStatus();
-  draw();
+  resizeBoardForViewport();
+  startAnimation();
   tocarMusica();
 
   timer = setInterval(
@@ -747,8 +811,7 @@ function placeFood() {
       return !occupied.has(cellKey(p));
     });
     if (escape) {
-      const types = ['normal', 'normal', 'ghost', 'drill', 'super', 'magnet'];
-      food = {...candidate, type: plankton ? 'red' : types[Math.floor(Math.random()*types.length)]};
+      food = {...candidate, id: ++foodSerial, type: chooseFoodType()};
       return true;
     }
   }
@@ -765,8 +828,13 @@ function placeFood() {
 
 function tick() {
   if (paused || over) return;
+  previousSnake = snake.map(p => ({...p}));
+  previousFood = food && {...food};
+  lastMoveAt = performance.now();
+  motionDuration = currentSpeed;
   gameTime += currentSpeed;
   refreshSpeed();
+  if (padDirection) setDirection(padDirection);
   direction = nextDirection;
   moveMagnet();
   const head = wrap({x: snake[0].x + direction.x, y: snake[0].y + direction.y});
@@ -786,7 +854,6 @@ function tick() {
   spawnPlankton();
   updatePlankton();
   updateStatus();
-  draw();
 }
 
 // =====================================
@@ -875,12 +942,44 @@ document.addEventListener('keydown', e => {
 // CONTROLES DIRECIONAIS MOBILE
 // =====================================
 
-document.querySelectorAll('[data-dir]').forEach(btn => {
-  btn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    setDirection(btn.dataset.dir);
-  });
+const directionPad = document.querySelector('.touch-controls');
+let padPointer = null;
+let padDirection = null;
+
+function clearPadPointer(event) {
+  if (event && event.pointerId !== padPointer) return;
+  padPointer = null;
+  padDirection = null;
+  directionPad.querySelectorAll('.pressed').forEach(button => button.classList.remove('pressed'));
+}
+
+function steerFromPointer(event) {
+  const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-dir]');
+  const button = hit && directionPad.contains(hit) ? hit : null;
+  directionPad.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
+  if (!button) { padDirection = null; return; }
+  button.classList.add('pressed');
+  padDirection = button.dataset.dir;
+  setDirection(padDirection);
+}
+
+directionPad.addEventListener('pointerdown', event => {
+  if (padPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  event.preventDefault();
+  padPointer = event.pointerId;
+  // A captura mantém o gesto mesmo no espaço central e fora dos botões.
+  directionPad.setPointerCapture(event.pointerId);
+  steerFromPointer(event);
 });
+directionPad.addEventListener('pointermove', event => {
+  if (event.pointerId !== padPointer) return;
+  event.preventDefault();
+  steerFromPointer(event);
+});
+directionPad.addEventListener('pointerup', clearPadPointer);
+directionPad.addEventListener('pointercancel', clearPadPointer);
+directionPad.addEventListener('lostpointercapture', clearPadPointer);
+window.addEventListener('blur', () => clearPadPointer());
 
 // =====================================
 // PAUSAR E CONTINUAR
@@ -889,6 +988,7 @@ document.querySelectorAll('[data-dir]').forEach(btn => {
 function togglePause() {
   if (over) return;
 
+  clearPadPointer();
   paused = !paused;
 
   overlay.classList.toggle('hidden', !paused);
@@ -914,7 +1014,7 @@ function togglePause() {
     'RECOMEÇAR';
 
   document.getElementById('pauseBtn').textContent =
-    paused ? '▶' : 'Ⅱ';
+    paused ? '▶' : 'II';
 }
 // =====================================
 // FIM DE JOGO
@@ -922,6 +1022,7 @@ function togglePause() {
 
 function endGame() {
   over = true;
+  clearPadPointer();
 
   clearInterval(timer);
 
@@ -951,6 +1052,8 @@ function endGame() {
 // =====================================
 
 function goMenu() {
+  clearPadPointer();
+  cancelAnimationFrame(animationFrame);
   clearInterval(timer);
   if (isFullscreen()) leaveFullscreen();
 
@@ -961,16 +1064,85 @@ function goMenu() {
   pararMusica();
 }
 
+// O canvas acompanha os pixels físicos da tela; a grade mantém células quadradas.
+function syncCanvasResolution() {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(rect.width * ratio), height = Math.round(rect.height * ratio);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width; canvas.height = height;
+  }
+  ctx.setTransform(width / BOARD_WIDTH, 0, 0, height / BOARD_HEIGHT, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  draw();
+}
+
+function fitFullscreenBoard() {
+  if (!isFullscreen()) { syncCanvasResolution(); return; }
+  const bounds = game.getBoundingClientRect();
+  const pad = directionPad.getBoundingClientRect();
+  const status = document.querySelector('.status-bar').getBoundingClientRect();
+  const header = document.querySelector('.game-head').getBoundingClientRect();
+  const sidePad = pad.width > 0 && bounds.width > bounds.height && bounds.height <= 500;
+  const top = Math.max(header.bottom-bounds.top+12, sidePad ? 72 : status.bottom-bounds.top+12);
+  const availableWidth = bounds.width - (sidePad ? pad.width+52 : 28);
+  const bottom = pad.height && !sidePad ? pad.top-bounds.top-18 : bounds.height-18;
+  const availableHeight = Math.max(80,bottom-top);
+  const frame = document.querySelector('.board-wrap');
+  const style = getComputedStyle(frame);
+  const borderX = parseFloat(style.borderLeftWidth)+parseFloat(style.borderRightWidth);
+  const borderY = parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth);
+  const width = Math.min(availableWidth, (availableHeight-borderY)*COLS/ROWS+borderX);
+  const height = (width-borderX)*ROWS/COLS+borderY;
+  game.style.setProperty('--map-width',`${width}px`);
+  game.style.setProperty('--map-height',`${height}px`);
+  game.style.setProperty('--map-left',`${14+(availableWidth-width)/2}px`);
+  game.style.setProperty('--map-top',`${top+(availableHeight-height)/2}px`);
+  syncCanvasResolution();
+}
+
+function interpolateCell(from, to, alpha) {
+  const dx = ((to.x-from.x+COLS*1.5)%COLS)-COLS/2;
+  const dy = ((to.y-from.y+ROWS*1.5)%ROWS)-ROWS/2;
+  return {x:(from.x+dx*alpha+COLS)%COLS,y:(from.y+dy*alpha+ROWS)%ROWS};
+}
+
+function paintWrapped(cell, paint) {
+  const xs = [cell.x*CELL], ys = [cell.y*CELL];
+  if(cell.x>COLS-1) xs.push((cell.x-COLS)*CELL);
+  if(cell.y>ROWS-1) ys.push((cell.y-ROWS)*CELL);
+  for(const x of xs) for(const y of ys) paint(x,y);
+}
+
+function applyCharacterEffect() {
+  // Troca visual solicitada: passagem por obstáculos fica translúcida.
+  if(hasPower('drill')) ctx.globalAlpha = .55;
+  if(hasPower('ghost')) {ctx.shadowColor = '#bc8cff';ctx.shadowBlur = 7;}
+  if(hasPower('super')) {ctx.shadowColor = '#ffe45c';ctx.shadowBlur = 12;}
+}
+
+function startAnimation() {
+  cancelAnimationFrame(animationFrame);
+  const render = now => {
+    if(game.classList.contains('hidden')) return;
+    const alpha = paused || over ? 1 : Math.min(1,Math.max(0,(now-lastMoveAt)/motionDuration));
+    draw(alpha,now);
+    if(!over) animationFrame = requestAnimationFrame(render);
+  };
+  animationFrame = requestAnimationFrame(render);
+}
+
 // =====================================
 // DESENHAR O CENÁRIO
 // =====================================
 
-function draw() {
+function draw(alpha = 1, now = performance.now()) {
   ctx.clearRect(
     0,
     0,
-    canvas.width,
-    canvas.height
+    BOARD_WIDTH,
+    BOARD_HEIGHT
   );
 
   // Fundo submarino
@@ -978,7 +1150,7 @@ function draw() {
     0,
     0,
     0,
-    canvas.height
+    BOARD_HEIGHT
   );
 
   const sceneHue = (200 + scenePhase * 47) % 360;
@@ -990,8 +1162,8 @@ function draw() {
   ctx.fillRect(
     0,
     0,
-    canvas.width,
-    canvas.height
+    BOARD_WIDTH,
+    BOARD_HEIGHT
   );
 
   // Grade do tabuleiro
@@ -1001,21 +1173,22 @@ function draw() {
   for (let x = 0; x <= COLS; x++) {
     ctx.beginPath();
     ctx.moveTo(x * CELL, 0);
-    ctx.lineTo(x * CELL, canvas.height);
+    ctx.lineTo(x * CELL, BOARD_HEIGHT);
     ctx.stroke();
   }
 
   for (let y = 0; y <= ROWS; y++) {
     ctx.beginPath();
     ctx.moveTo(0, y * CELL);
-    ctx.lineTo(canvas.width, y * CELL);
+    ctx.lineTo(BOARD_WIDTH, y * CELL);
     ctx.stroke();
   }
 
   // Bolhas no fundo
   for (let i = 0; i < 13; i++) {
-    const x = (i * 83 + 31) % canvas.width;
-    const y = (i * 47 + 22) % canvas.height;
+    const x = (i * 83 + 31) % BOARD_WIDTH;
+    const visualTime = gameTime + ((!paused && !over) ? alpha * motionDuration : 0);
+    const y = (i * 47 + 22 - visualTime / 150 + BOARD_HEIGHT * 100) % BOARD_HEIGHT;
 
     ctx.strokeStyle = 'rgba(194,248,255,.22)';
 
@@ -1042,18 +1215,30 @@ function draw() {
   });
 
   // Hambúrguer
-  if (food) { ctx.save(); drawFood(food.x * CELL, food.y * CELL); ctx.restore(); }
+  if (food) {
+    const from = previousFood?.id === food.id ? previousFood : food;
+    paintWrapped(interpolateCell(from, food, alpha), (x,y) => {
+      ctx.save(); drawFood(x,y); ctx.restore();
+    });
+  }
 
-  drawPlankton();
+  drawPlankton(now);
 
-  // Cobra
-  snake.forEach((s, i) => {
-    ctx.save();
-    if (hasPower('ghost')) ctx.globalAlpha = .6;
-    if (hasPower('super')) { ctx.shadowColor = '#ffe45c'; ctx.shadowBlur = 12; }
-    drawSnake(s.x * CELL, s.y * CELL, i);
-    ctx.restore();
-  });
+  // Interpolação contínua entre passos; a lógica de colisão continua na grade.
+  const positions = snake.map((cell,i) => interpolateCell(previousSnake[i] || cell,cell,alpha));
+  ctx.save();
+  applyCharacterEffect();
+  ctx.strokeStyle = character === 'bob' ? '#ffd92e' : '#ff829b';
+  ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for(let i=1;i<positions.length;i++) {
+    const a=positions[i-1], b=positions[i];
+    if(Math.abs(a.x-b.x)>1.1 || Math.abs(a.y-b.y)>1.1) continue;
+    ctx.beginPath();ctx.moveTo(a.x*CELL+10,a.y*CELL+10);ctx.lineTo(b.x*CELL+10,b.y*CELL+10);ctx.stroke();
+  }
+  ctx.restore();
+  positions.forEach((cell,i) => paintWrapped(cell, (x,y) => {
+    ctx.save(); applyCharacterEffect(); drawSnake(x,y,i); ctx.restore();
+  }));
 }
 
 // =====================================
@@ -1136,8 +1321,8 @@ function drawSeaDecorations() {
   // Flores marinhas da Fenda do Biquíni, ao fundo, sem colisão.
   ctx.strokeStyle = 'rgba(135,245,224,.18)'; ctx.lineWidth = 3;
   for (let i=0;i<5;i++) {
-    const x=(i*137+scenePhase*29+50)%canvas.width;
-    const y=(i*89+40)%canvas.height;
+    const x=(i*137+scenePhase*29+50)%BOARD_WIDTH;
+    const y=(i*89+40)%BOARD_HEIGHT;
     for(let petal=0;petal<5;petal++) {
       const angle=petal*Math.PI*2/5;
       ctx.beginPath(); ctx.ellipse(x+Math.cos(angle)*14,y+Math.sin(angle)*14,12,6,angle,0,Math.PI*2); ctx.stroke();
@@ -1170,13 +1355,16 @@ function drawHouse(x,y,kind) {
   ctx.restore();
 }
 
-function drawPlankton() {
+function drawPlankton(now = performance.now()) {
   if(beam && beam.until>gameTime) {
     ctx.save();ctx.strokeStyle='#ff4560';ctx.lineWidth=4;ctx.shadowColor='#fff';ctx.shadowBlur=10;
     ctx.beginPath();ctx.moveTo(beam.from.x*CELL+10,beam.from.y*CELL+10);ctx.lineTo(beam.to.x*CELL+10,beam.to.y*CELL+10);ctx.stroke();ctx.restore();
   }
   if(!plankton) return;
-  const x=plankton.x*CELL,y=plankton.y*CELL;
+  const motion = planktonMotion;
+  const alpha = !paused && !over && motion ? Math.min(1,(now-motion.startedAt)/motion.duration) : 1;
+  const position = interpolateCell(motion?.from || plankton,plankton,alpha);
+  paintWrapped(position, (x,y) => {
   ctx.save();ctx.translate(x,y);
   ctx.fillStyle=plankton.stunnedUntil>gameTime?'#66e6ff':'#80c22f';
   roundRect(4,3,12,16,5);ctx.fill();
@@ -1185,6 +1373,7 @@ function drawPlankton() {
   ctx.fillStyle='#e33d38';ctx.beginPath();ctx.arc(10,9,2,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#203320';ctx.fillRect(7,15,6,2);
   ctx.restore();
+  });
 }
 
 // =====================================
@@ -1308,5 +1497,11 @@ function roundRect(x, y, w, h, r) {
 // DESENHAR TABULEIRO INICIAL
 // =====================================
 
+const layoutObserver = new ResizeObserver(fitFullscreenBoard);
+layoutObserver.observe(game);
+layoutObserver.observe(document.querySelector('.status-bar'));
+layoutObserver.observe(directionPad);
+const canvasObserver = new ResizeObserver(syncCanvasResolution);
+canvasObserver.observe(canvas);
 resizeBoardForViewport();
-draw();
+syncCanvasResolution();

@@ -25,3 +25,62 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:10/7}
 .game-footer{display:flex;justify-content:space-between;gap:10px;font-size:11px;font-weight:800;color:#577488;padding:12px 2px 0}.touch-controls{display:none;align-items:center;flex-direction:column;gap:5px;margin:16px auto 0}.touch-controls>div{display:flex;gap:7px}.touch-controls button{border:0;border-radius:12px;width:48px;height:43px;background:#0b507a;color:white;font-size:19px;box-shadow:0 3px 0 #043b5b;touch-action:manipulation}
 footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18px 0 0}footer span{margin:0 6px;color:var(--yellow)}
 @media(max-width:720px){body{padding:12px}.menu-panel{grid-template-columns:1fr}.intro{padding:25px 23px;min-height:235px}.intro h2{font-size:39px}.intro:after{width:250px;height:110px;bottom:-60px}.sea-icons{margin-top:0}.choices{padding:23px 18px}.game-panel{padding:11px}.game-head{gap:7px}.stat{padding:7px 8px;min-width:75px}.stat strong{font-size:17px}.stat small{font-size:8px}.game-head strong{font-size:13px}.small-button{width:37px;height:37px}.touch-controls{display:flex}.game-footer{font-size:10px}.brand h1{font-size:20px}.bubble{width:43px;height:43px}.best{padding:8px;font-size:11px}}
+/* Painel de poderes e guia acessível também fora da tela cheia. */
+.status-bar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px 12px;font-size:12px;font-weight:900;color:#07547b;margin:0 0 10px;min-height:20px}
+.burger-guide{list-style:none;padding:0;display:grid;gap:12px}
+.burger-guide li{display:flex;gap:10px;align-items:center}
+.burger-guide li>span{display:grid;place-items:center;flex:0 0 32px;height:28px;background:var(--burger);color:#112c49;border:2px solid #082d4b;border-radius:10px;font-weight:1000;font-size:17px}
+.how-text p{line-height:1.6}
+#game:is(:fullscreen,.fallback-fullscreen) .status-bar{position:absolute;left:10px;right:10px;bottom:10px;z-index:2;color:white;text-shadow:0 2px 3px #00192c;pointer-events:none;max-width:calc(100% - 180px)}
+
+/* Console portátil: o direcional tem espaço próprio, sem cobrir o mapa. */
+@media(max-width:900px),(pointer:coarse){
+  #game:is(:fullscreen,.fallback-fullscreen){
+    --pad-size:clamp(54px,8.8dvh,76px);
+    --control-height:calc(var(--pad-size)*3 + 34px);
+    background:linear-gradient(140deg,#07577a,#092d4b 65%,#041a2c) !important;
+    box-shadow:inset 0 0 0 5px #38bfd070,inset 0 -12px 0 #02121f;
+  }
+  #game:is(:fullscreen,.fallback-fullscreen) .board-wrap{
+    inset:calc(64px + env(safe-area-inset-top)) 12px calc(var(--control-height) + 48px + env(safe-area-inset-bottom)) !important;
+    border:5px solid #082232 !important;border-radius:12px !important;
+    box-shadow:0 0 0 3px #40c6c5,0 8px 0 #021a2b !important;
+  }
+  #game:is(:fullscreen,.fallback-fullscreen) .game-head{top:max(10px,env(safe-area-inset-top)) !important;left:12px !important;gap:6px;opacity:1}
+  #game:is(:fullscreen,.fallback-fullscreen) .game-head .stat{padding:5px 8px;min-width:64px;background:#d2f1c6;border:2px solid #629987;border-radius:6px}
+  #game:is(:fullscreen,.fallback-fullscreen) .game-head .stat strong{font-family:monospace;color:#214936;font-size:17px}
+  #game:is(:fullscreen,.fallback-fullscreen) #fullscreenBtn{font-size:11px;padding:9px 7px !important;right:10px !important;top:max(12px,env(safe-area-inset-top)) !important;max-width:118px}
+  #game:is(:fullscreen,.fallback-fullscreen) .touch-controls{
+    display:grid !important;grid-template-columns:repeat(3,var(--pad-size));grid-template-rows:repeat(3,var(--pad-size));
+    gap:0;left:50% !important;right:auto !important;bottom:calc(18px + env(safe-area-inset-bottom)) !important;
+    transform:translateX(-50%);opacity:1 !important;filter:drop-shadow(0 7px 0 #021421);
+  }
+  #game:is(:fullscreen,.fallback-fullscreen) .touch-controls>div{display:contents}
+  #game:is(:fullscreen,.fallback-fullscreen) .touch-controls:before{content:'✦';grid-column:2;grid-row:2;display:grid;place-items:center;background:#153e52;color:#42788a;font-size:26px}
+  #game:is(:fullscreen,.fallback-fullscreen) .touch-controls button{
+    width:var(--pad-size) !important;height:var(--pad-size) !important;min-width:48px !important;min-height:48px !important;
+    font-size:clamp(25px,4dvh,36px);background:linear-gradient(#25576b,#14394f);color:#b8ffdf;
+    border:2px solid #4b8193;box-shadow:inset 0 3px 0 #ffffff20;border-radius:10px;
+  }
+  #game:is(:fullscreen,.fallback-fullscreen) .touch-controls button:active{background:#47c8b0;color:#082d4b}
+  #game:is(:fullscreen,.fallback-fullscreen) [data-dir=up]{grid-column:2;grid-row:1}
+  #game:is(:fullscreen,.fallback-fullscreen) [data-dir=left]{grid-column:1;grid-row:2}
+  #game:is(:fullscreen,.fallback-fullscreen) [data-dir=right]{grid-column:3;grid-row:2}
+  #game:is(:fullscreen,.fallback-fullscreen) [data-dir=down]{grid-column:2;grid-row:3}
+  #game:is(:fullscreen,.fallback-fullscreen) .status-bar{
+    left:14px;right:14px;bottom:calc(var(--control-height) + 7px + env(safe-area-inset-bottom));
+    max-width:none;justify-content:center;text-align:center;font-size:11px;margin:0;line-height:1.4;
+  }
+  #game:is(:fullscreen,.fallback-fullscreen) .overlay-card{max-height:100%;overflow:auto;padding:12px}
+  #game:is(:fullscreen,.fallback-fullscreen) .overlay-icon{font-size:24px}
+  #game:is(:fullscreen,.fallback-fullscreen) .overlay h2{font-size:19px}
+  #game:is(:fullscreen,.fallback-fullscreen) .overlay .primary,
+  #game:is(:fullscreen,.fallback-fullscreen) .overlay .secondary{padding:10px}
+}
+/* Se a pessoa girar o aparelho, os controles continuam disponíveis à direita. */
+@media(max-height:500px) and (orientation:landscape){
+  #game:is(:fullscreen,.fallback-fullscreen){--pad-size:58px}
+  #game:is(:fullscreen,.fallback-fullscreen) .board-wrap{inset:64px 210px 14px 12px !important}
+  #game:is(:fullscreen,.fallback-fullscreen) .touch-controls{left:auto !important;right:16px !important;bottom:35px !important;transform:none}
+  #game:is(:fullscreen,.fallback-fullscreen) .status-bar{left:auto;right:10px;bottom:auto;top:70px;width:185px}
+}

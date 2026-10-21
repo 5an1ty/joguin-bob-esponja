@@ -168,11 +168,6 @@ fullscreenStyles.textContent = `
     width: 48px; height: 44px; min-width: 44px; min-height: 44px;
   }
   #game:is(:fullscreen, .fallback-fullscreen) .overlay { z-index: 5; }
-  #game.rotated-fullscreen {
-    inset: auto !important; top: 0 !important; left: 100vw !important;
-    width: 100dvh !important; height: 100vw !important;
-    transform: rotate(90deg); transform-origin: top left;
-  }
   #game:is(:fullscreen, .fallback-fullscreen) .overlay-card { padding: 10px; }
   body.game-fullscreen { overflow: hidden; }
 `;
@@ -184,8 +179,7 @@ function isFullscreen() {
 
 async function leaveFullscreen() {
   if (document.fullscreenElement === game) await document.exitFullscreen();
-  game.classList.remove('fallback-fullscreen', 'rotated-fullscreen');
-  if (screen.orientation?.unlock) screen.orientation.unlock();
+  game.classList.remove('fallback-fullscreen');
   resizeBoardForViewport();
 }
 
@@ -200,11 +194,6 @@ async function toggleFullscreen() {
   } catch {
     game.classList.add('fallback-fullscreen');
   }
-  try {
-    if (screen.orientation?.lock) await screen.orientation.lock('landscape');
-  } catch {
-    // Quando o navegador recusa o bloqueio, o layout gira dentro da página.
-  }
   resizeBoardForViewport();
 }
 fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -214,10 +203,8 @@ window.addEventListener('orientationchange', resizeBoardForViewport);
 
 function resizeBoardForViewport() {
   const active = isFullscreen();
-  game.classList.toggle('rotated-fullscreen', active && window.innerHeight > window.innerWidth);
   document.body.classList.toggle('game-fullscreen', active);
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
-  if (!active && screen.orientation?.unlock) screen.orientation.unlock();
 }
 
 // =====================================
@@ -238,9 +225,8 @@ canvas.addEventListener('pointerdown', event => {
 canvas.addEventListener('pointerup', event => {
   if (event.pointerType === 'mouse') return;
 
-  const rotated = game.classList.contains('rotated-fullscreen');
-  const dx = rotated ? event.clientY - swipeStartY : event.clientX - swipeStartX;
-  const dy = rotated ? swipeStartX - event.clientX : event.clientY - swipeStartY;
+  const dx = event.clientX - swipeStartX;
+  const dy = event.clientY - swipeStartY;
 
   if (
     Math.max(Math.abs(dx), Math.abs(dy)) <
@@ -319,6 +305,117 @@ let score = 0;
 let timer = null;
 let paused = false;
 let over = false;
+
+const foodTypes = {
+  normal: {color: '#f5a62a', icon: '🍔', label: 'Clássico', duration: 0},
+  ghost: {color: '#bc8cff', icon: '👻', label: 'Atravessar o corpo', duration: 8000},
+  drill: {color: '#38bdf8', icon: '💎', label: 'Atravessar obstáculos', duration: 8000},
+  super: {color: '#ffe45c', icon: '⚡', label: 'Imunidade + supervelocidade', duration: 6000},
+  magnet: {color: '#ff77c8', icon: '🧲', label: 'Ímã de hambúrgueres', duration: 10000},
+  red: {color: '#ff334e', icon: 'ϟ', label: 'Siri vermelho · raio anti-Plankton', duration: 0}
+};
+let gameTime = 0;
+let powers = {};
+let plankton = null;
+let pendingPlanktons = 0;
+let bossMoveTime = 0;
+let beam = null;
+const powerStatus = document.getElementById('powerStatus');
+const bossStatus = document.getElementById('bossStatus');
+
+function hasPower(type) { return (powers[type] || 0) > gameTime; }
+
+function refreshSpeed() {
+  const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, scenePhase));
+  const speed = hasPower('super') ? Math.max(25, base * 0.55) : base;
+  if (speed !== currentSpeed) {
+    currentSpeed = speed;
+    clearInterval(timer);
+    if (!over) timer = setInterval(tick, currentSpeed);
+  }
+}
+
+function updateStatus() {
+  powerStatus.textContent = Object.keys(powers).filter(hasPower).map(type =>
+    `${foodTypes[type].icon} ${foodTypes[type].label} ${Math.ceil((powers[type]-gameTime)/1000)}s`
+  ).join(' · ') || '🍔 Pegue os hambúrgueres coloridos!';
+  bossStatus.textContent = plankton
+    ? `👁 Plankton ${plankton.hits}/3 raios${plankton.stunnedUntil > gameTime ? ' · PARALISADO' : ' · PERSEGUINDO!'}`
+    : 'Bordas livres ↔ ↕';
+}
+
+function spawnPlankton() {
+  if (plankton || !pendingPlanktons) return;
+  const head = snake[0];
+  const cells = [];
+  for (let y=0; y<ROWS; y++) for (let x=0; x<COLS; x++) {
+    const p = {x,y};
+    if (torusDistance(head,p) >= 8 && !snake.some(s=>same(s,p)) &&
+        !obstacles.some(o=>same(o,p)) && !(food && same(food,p))) cells.push(p);
+  }
+  if (!cells.length) return;
+  plankton = {...cells[Math.floor(Math.random()*cells.length)], hits: 0, stunnedUntil: 0};
+  pendingPlanktons--;
+  bossMoveTime = gameTime + 600;
+}
+
+function addScore(amount) {
+  const previous = score;
+  score += amount;
+  scoreEl.textContent = score;
+  if (score > best) {
+    best = score; bestEl.textContent = best;
+    localStorage.setItem('bobSnakeBest', best);
+  }
+  const phase = Math.floor(score / 30);
+  if (phase > obstaclePhase) {
+    obstaclePhase = phase;
+    generateObstacles(settings[difficulty].obstacles);
+  }
+  scenePhase = Math.floor(score / 100);
+  pendingPlanktons += Math.floor(score/200)-Math.floor(previous/200);
+  spawnPlankton();
+  refreshSpeed();
+}
+
+function collectFood() {
+  const type = food.type || 'normal';
+  if (foodTypes[type].duration) powers[type] = gameTime + foodTypes[type].duration;
+  if (type === 'red' && plankton) {
+    beam = {from: {...snake[0]}, to: {...plankton}, until: gameTime + 400};
+    plankton.hits++;
+    plankton.stunnedUntil = gameTime + 3000;
+    if (plankton.hits >= 3) {
+      plankton = null;
+      addScore(50);
+    }
+  }
+  addScore(10);
+  return placeFood();
+}
+
+function moveMagnet() {
+  if (!food || !hasPower('magnet')) return;
+  const head = snake[0];
+  const moves = steps.map(d => wrap({x:food.x+d.x, y:food.y+d.y}))
+    .filter(p => torusDistance(p,head) < torusDistance(food,head) &&
+      !snake.slice(1).some(s=>same(s,p)));
+  if (moves.length) Object.assign(food, moves[Math.floor(Math.random()*moves.length)]);
+}
+
+function updatePlankton() {
+  if (!plankton || plankton.stunnedUntil > gameTime) return;
+  if (same(plankton,snake[0]) && !hasPower('super')) { endGame(); return; }
+  if (gameTime >= bossMoveTime) {
+    const head = snake[0];
+    const moves = steps.map(d=>wrap({x:plankton.x+d.x,y:plankton.y+d.y}));
+    moves.sort((a,b)=>torusDistance(a,head)-torusDistance(b,head));
+    Object.assign(plankton,moves[0]);
+    bossMoveTime = gameTime + 420;
+  }
+  if (same(plankton,snake[0]) && !hasPower('super')) endGame();
+}
+
 
 let best = Number(
   localStorage.getItem('bobSnakeBest') || 0
@@ -418,8 +515,8 @@ document.querySelectorAll('.difficulty').forEach(btn => {
 // =====================================
 
 document.getElementById('howBtn').addEventListener('click', () => {
-  document.getElementById('howText')
-    .classList.toggle('hidden');
+  const hidden = document.getElementById('howText').classList.toggle('hidden');
+  document.getElementById('howBtn').setAttribute('aria-expanded', String(!hidden));
 });
 
 // =====================================
@@ -452,6 +549,12 @@ function startGame() {
   game.classList.remove('hidden');
 
   score = 0;
+  gameTime = 0;
+  powers = {};
+  plankton = null;
+  pendingPlanktons = 0;
+  beam = null;
+  food = null;
   paused = false;
   over = false;
 
@@ -496,6 +599,7 @@ function startGame() {
 
   document.getElementById('pauseBtn').textContent = 'Ⅱ';
 
+  updateStatus();
   draw();
   tocarMusica();
 
@@ -513,8 +617,8 @@ function same(a, b) {
   return a.x === b.x && a.y === b.y;
 }
 
-// Gera obstáculos sem ocupar a cobra, a comida
-// ou o espaço logo à frente dela.
+// Gera obstáculos sem ocupar a cobra, a comida, o Plankton
+// ou o espaço logo à frente dela, inclusive ao atravessar as bordas.
 function generateObstacles(count) {
   const generated = [];
   const head = snake[0];
@@ -544,8 +648,8 @@ function generateObstacles(count) {
          distance <= safeAheadDistance;
          distance++) {
       const safePosition = {
-        x: head.x + direction.x * distance,
-        y: head.y + direction.y * distance
+        x: (head.x + direction.x * distance + COLS) % COLS,
+        y: (head.y + direction.y * distance + ROWS) % ROWS
       };
 
       if (
@@ -567,6 +671,7 @@ function generateObstacles(count) {
       Math.abs(p.y - head.y) <= 2;
 
     if (
+      !(plankton && same(plankton,p)) &&
       !onSnake &&
       !onFood &&
       !onExisting &&
@@ -587,7 +692,11 @@ function generateObstacles(count) {
 
 const steps = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
 const cellKey = p => p.y * COLS + p.x;
-const inside = p => p.x >= 0 && p.x < COLS && p.y >= 0 && p.y < ROWS;
+const wrap = p => ({x: (p.x + COLS) % COLS, y: (p.y + ROWS) % ROWS});
+const torusDistance = (a,b) => {
+  const dx = Math.abs(a.x-b.x), dy = Math.abs(a.y-b.y);
+  return Math.min(dx,COLS-dx) + Math.min(dy,ROWS-dy);
+};
 
 // Não permite ilhas ou becos sem saída criados pelas pedras.
 function connectedArena(rocks) {
@@ -596,8 +705,8 @@ function connectedArena(rocks) {
   const queue = [snake[0]];
   for (let i = 0; i < queue.length; i++) {
     const cell = queue[i];
-    const neighbors = steps.map(d => ({x: cell.x+d.x, y: cell.y+d.y}))
-      .filter(p => inside(p) && !blocked.has(cellKey(p)));
+    const neighbors = steps.map(d => wrap({x: cell.x+d.x, y: cell.y+d.y}))
+      .filter(p => !blocked.has(cellKey(p)));
     if (neighbors.length < 2) return false;
     for (const p of neighbors) if (!seen.has(cellKey(p))) {
       seen.add(cellKey(p)); queue.push(p);
@@ -609,15 +718,15 @@ function connectedArena(rocks) {
 function placeFood() {
   // Cada candidato possui um caminho sem atravessar o corpo e espaço para
   // continuar depois de comer. A simulação inclui o crescimento da cobra.
-  const blocked = new Set([...obstacles, ...snake.slice(1)].map(cellKey));
+  const blocked = new Set([...obstacles, ...snake.slice(1), ...(plankton ? [plankton] : [])].map(cellKey));
   const parents = new Map([[cellKey(snake[0]), null]]);
   const queue = [snake[0]];
   for (let i = 0; i < queue.length; i++) {
     for (const d of steps) {
       if (i === 0 && d.x === -direction.x && d.y === -direction.y) continue;
-      const p = {x: queue[i].x+d.x, y: queue[i].y+d.y};
+      const p = wrap({x: queue[i].x+d.x, y: queue[i].y+d.y});
       const key = cellKey(p);
-      if (!inside(p) || blocked.has(key) || parents.has(key)) continue;
+      if (blocked.has(key) || parents.has(key)) continue;
       parents.set(key, queue[i]); queue.push(p);
     }
   }
@@ -632,12 +741,16 @@ function placeFood() {
       body.unshift(p);
       if (!same(p, candidate)) body.pop();
     }
-    const occupied = new Set([...obstacles, ...body.slice(1, -1)].map(cellKey));
+    const occupied = new Set([...obstacles, ...body.slice(1, -1), ...(plankton ? [plankton] : [])].map(cellKey));
     const escape = steps.some(d => {
-      const p = {x:candidate.x+d.x, y:candidate.y+d.y};
-      return inside(p) && !occupied.has(cellKey(p));
+      const p = wrap({x:candidate.x+d.x, y:candidate.y+d.y});
+      return !occupied.has(cellKey(p));
     });
-    if (escape) { food = candidate; return true; }
+    if (escape) {
+      const types = ['normal', 'normal', 'ghost', 'drill', 'super', 'magnet'];
+      food = {...candidate, type: plankton ? 'red' : types[Math.floor(Math.random()*types.length)]};
+      return true;
+    }
   }
   food = null;
   endGame();
@@ -652,65 +765,27 @@ function placeFood() {
 
 function tick() {
   if (paused || over) return;
-
+  gameTime += currentSpeed;
+  refreshSpeed();
   direction = nextDirection;
-
-  const head = {
-    x: snake[0].x + direction.x,
-    y: snake[0].y + direction.y
-  };
-
-  // Verificar colisões com as paredes
-  const hitWall =
-    head.x < 0 || head.x >= COLS ||
-    head.y < 0 || head.y >= ROWS;
-
-  // Verificar colisão com obstáculos
-  const hitObstacle = obstacles.some(o => same(o, head));
-
-  // Verificar colisão com o próprio corpo
-  const hitSelf = snake.some((s, i) =>
-    i < snake.length - 1 && same(s, head)
-  );
-
-  if (hitWall || hitObstacle || hitSelf) {
-    endGame();
-    return;
+  moveMagnet();
+  const head = wrap({x: snake[0].x + direction.x, y: snake[0].y + direction.y});
+  // O ímã pode entregar a comida na posição atual da cabeça.
+  const eating = food && (same(head, food) || same(snake[0], food));
+  const hitObstacle = obstacles.some(o => same(o,head));
+  const body = eating ? snake : snake.slice(0,-1);
+  const hitSelf = body.some(s=>same(s,head));
+  if ((hitObstacle && !hasPower('drill') && !hasPower('super')) ||
+      (hitSelf && !hasPower('ghost') && !hasPower('super'))) {
+    endGame(); return;
   }
-
-  // Adicionar nova cabeça
   snake.unshift(head);
-
-  if (same(head, food)) {
-    // Comer hambúrguer
-    score += 10;
-    scoreEl.textContent = score;
-
-    if (score % 30 === 0) {
-      obstaclePhase++;
-      generateObstacles(settings[difficulty].obstacles);
-    }
-
-    // Atualizar recorde
-    if (score > best) {
-      best = score;
-      bestEl.textContent = best;
-
-      localStorage.setItem('bobSnakeBest', best);
-    }
-
-    if (!placeFood()) { draw(); return; }
-    if (score % 100 === 0) {
-      scenePhase = Math.floor(score / 100);
-      currentSpeed = Math.max(40, settings[difficulty].speed * Math.pow(0.95, scenePhase));
-      clearInterval(timer);
-      timer = setInterval(tick, currentSpeed);
-    }
-  } else {
-    // Remover a cauda se não comeu
-    snake.pop();
-  }
-
+  if (eating) {
+    if (!collectFood()) { draw(); return; }
+  } else snake.pop();
+  spawnPlankton();
+  updatePlankton();
+  updateStatus();
   draw();
 }
 
@@ -957,17 +1032,27 @@ function draw() {
     ctx.stroke();
   }
 
+  drawSeaDecorations();
+
   // Obstáculos
   obstacles.forEach((o, i) => {
-    drawRock(o.x * CELL, o.y * CELL, i);
+    const kind = (i + scenePhase) % 4;
+    if (kind === 0) drawRock(o.x * CELL, o.y * CELL, i);
+    else drawHouse(o.x * CELL, o.y * CELL, kind);
   });
 
   // Hambúrguer
-  if (food) drawFood(food.x * CELL, food.y * CELL);
+  if (food) { ctx.save(); drawFood(food.x * CELL, food.y * CELL); ctx.restore(); }
+
+  drawPlankton();
 
   // Cobra
   snake.forEach((s, i) => {
+    ctx.save();
+    if (hasPower('ghost')) ctx.globalAlpha = .6;
+    if (hasPower('super')) { ctx.shadowColor = '#ffe45c'; ctx.shadowBlur = 12; }
     drawSnake(s.x * CELL, s.y * CELL, i);
+    ctx.restore();
   });
 }
 
@@ -976,7 +1061,7 @@ function draw() {
 // =====================================
 
 function drawRock(x, y, i) {
-  // Depois de 500 pontos, as pedras mudam de aparência.
+  // A cor fica mais vibrante a cada mudança de obstáculos.
   const hue = (210 + obstaclePhase * 67) % 360;
   const saturation = Math.min(100, 20 + obstaclePhase * 12);
   ctx.fillStyle = `hsl(${hue}, ${saturation}%, 22%)`;
@@ -1014,7 +1099,10 @@ function drawFood(x, y) {
   roundRect(x + 3, y + 5, 14, 10, 4);
   ctx.fill();
 
-  ctx.fillStyle = '#f5a62a';
+  const type = foodTypes[food?.type || 'normal'];
+  ctx.shadowColor = type.color;
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = type.color;
 
   roundRect(x + 3, y + 4, 14, 5, 3);
   ctx.fill();
@@ -1027,7 +1115,7 @@ function drawFood(x, y) {
   roundRect(x + 4, y + 8, 12, 3, 2);
   ctx.fill();
 
-  ctx.fillStyle = '#ffdb68';
+  ctx.fillStyle = type.color;
 
   roundRect(x + 3, y + 12, 14, 4, 2);
   ctx.fill();
@@ -1037,7 +1125,68 @@ function drawFood(x, y) {
   ctx.beginPath();
   ctx.arc(x + 7, y + 5, 1, 0, Math.PI * 2);
   ctx.fill();
+  ctx.shadowBlur = 0;
+  if (food?.type !== 'normal') {
+    ctx.fillStyle = '#112c49'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText({ghost:'G', drill:'O', super:'⚡', magnet:'M', red:'ϟ'}[food.type] || '', x+10, y+12);
+  }
 }
+function drawSeaDecorations() {
+  ctx.save();
+  // Flores marinhas da Fenda do Biquíni, ao fundo, sem colisão.
+  ctx.strokeStyle = 'rgba(135,245,224,.18)'; ctx.lineWidth = 3;
+  for (let i=0;i<5;i++) {
+    const x=(i*137+scenePhase*29+50)%canvas.width;
+    const y=(i*89+40)%canvas.height;
+    for(let petal=0;petal<5;petal++) {
+      const angle=petal*Math.PI*2/5;
+      ctx.beginPath(); ctx.ellipse(x+Math.cos(angle)*14,y+Math.sin(angle)*14,12,6,angle,0,Math.PI*2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=.32; ctx.font='18px sans-serif';
+  for(let i=0;i<8;i++) ctx.fillText(['🪸','🐚','🪼'][i%3],(i*79+scenePhase*17)%580,400-(i%3)*13);
+  ctx.restore();
+}
+
+function drawHouse(x,y,kind) {
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.strokeStyle = `hsl(${(obstaclePhase*67+40)%360}, 95%, 72%)`;
+  ctx.lineWidth=1;
+  if(kind===1) { // Abacaxi do Bob
+    ctx.fillStyle='#ef9e20'; roundRect(3,6,14,14,5); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle='#a95e14';
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(4+i*4,7);ctx.lineTo(9+i*4,18);ctx.stroke();}
+    ctx.fillStyle='#54d557'; ctx.beginPath();ctx.moveTo(10,7);ctx.lineTo(3,1);ctx.lineTo(9,3);ctx.lineTo(11,0);ctx.lineTo(13,4);ctx.lineTo(18,2);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#69e4ff';ctx.fillRect(5,10,3,3);ctx.fillRect(11,15,3,5);
+  } else if(kind===2) { // Moai do Lula Molusco
+    ctx.fillStyle='#66899a';roundRect(4,1,12,19,3);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#233f55';ctx.fillRect(5,6,4,3);ctx.fillRect(12,6,3,3);ctx.fillRect(8,15,5,5);
+    ctx.fillStyle='#93b6bd';ctx.fillRect(8,8,4,5);
+  } else { // Rocha/casa do Patrick
+    ctx.fillStyle='#a86e5c';ctx.beginPath();ctx.arc(10,17,9,Math.PI,0);ctx.lineTo(19,20);ctx.lineTo(1,20);ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle='#e4b578';ctx.fillRect(9,4,2,5);ctx.fillRect(6,3,8,2);
+  }
+  ctx.restore();
+}
+
+function drawPlankton() {
+  if(beam && beam.until>gameTime) {
+    ctx.save();ctx.strokeStyle='#ff4560';ctx.lineWidth=4;ctx.shadowColor='#fff';ctx.shadowBlur=10;
+    ctx.beginPath();ctx.moveTo(beam.from.x*CELL+10,beam.from.y*CELL+10);ctx.lineTo(beam.to.x*CELL+10,beam.to.y*CELL+10);ctx.stroke();ctx.restore();
+  }
+  if(!plankton) return;
+  const x=plankton.x*CELL,y=plankton.y*CELL;
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle=plankton.stunnedUntil>gameTime?'#66e6ff':'#80c22f';
+  roundRect(4,3,12,16,5);ctx.fill();
+  ctx.strokeStyle='#224e24';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(6,4);ctx.lineTo(2,0);ctx.moveTo(14,4);ctx.lineTo(18,0);ctx.stroke();
+  ctx.fillStyle='#fff4a3';ctx.beginPath();ctx.ellipse(10,9,5,4,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#e33d38';ctx.beginPath();ctx.arc(10,9,2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#203320';ctx.fillRect(7,15,6,2);
+  ctx.restore();
+}
+
 // =====================================
 // DESENHAR A COBRA
 // =====================================

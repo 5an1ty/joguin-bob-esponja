@@ -54,3 +54,8 @@ são decodificadas no navegador e a troca exploração/chefe é testada por difi
 O sopro congelante é testado com alcance e ângulo do cone, dano frontal/traseiro,
 congelamento, portais, retorno ao tamanho inicial e recompensas por derrotas
 simultâneas. O modo clássico permanece sem essas mecânicas exclusivas da Batalha.
+
+As bombas da Batalha são verificadas quanto à geração exclusiva nesse modo,
+ativação por Plankton, dano em raio de 15 células, recompensa por derrota,
+consumo único, imunidade do jogador à explosão e colisão como obstáculo.
+O cone congelante também cobre inimigos além do antigo limite de 9 células.

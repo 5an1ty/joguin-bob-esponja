@@ -741,7 +741,7 @@ class GameTests(unittest.TestCase):
         self.check("""
           assert(cheatFoods.length===COLS,'full row');
           const row=cheatFoods[0].y;
-          assert(cheatFoods.every(item=>item.y===row && item.type==='normal'),'normal row');
+          assert(cheatFoods.every(item=>item.y===row && item.type==='super'),'yellow row');
           assert(new Set(cheatFoods.map(item=>item.x)).size===COLS,'all columns');
           assert(!cheatFoods.some(item=>snake.some(p=>same(p,item)) || obstacles.some(p=>same(p,item))),'safe placement');
           const ids=cheatFoods.map(item=>item.id).join(',');
@@ -781,6 +781,42 @@ class GameTests(unittest.TestCase):
           assert(!obstacles.some(p=>p.y===cheatFoods[0].y),'rocks cleared from row');
         """)
 
+    def test_battle_bombs_area_damage_rewards_and_classic_exclusion(self):
+        self.check("""
+          gameMode='battle';startGame();clearTimeout(timer);
+          assert(obstacles.some(o=>o.bomb),'battle has bombs');
+          snake=[{x:0,y:0}];previousSnake=snake.map(p=>({...p}));
+          const make=(x,y,hits=0)=>({x,y,hits,aggression:3,stunnedUntil:0,nextMoveAt:99999});
+          battleEnemies=[make(0,0,2),make(10,0),make(15,10)];
+          const bomb={x:0,y:0,bomb:true};obstacles=[bomb];
+          const oldScore=score;explodeBomb(bomb);
+          assert(!obstacles.includes(bomb),'bomb consumed');
+          assert(battleEnemies.length===2 && battleEnemies[0].hits===1 && battleEnemies[1].hits===0,'radius 15');
+          assert(battleRewards===1 && score===oldScore+50,'kill reward');
+          assert(!over,'player immune to blast');
+          assert(bombExplosions.length===1,'explosion animation');draw();
+          explodeBomb(bomb);assert(battleEnemies[0].hits===1,'cannot detonate twice');
+          gameMode='classic';startGame();clearTimeout(timer);
+          assert(!obstacles.some(o=>o.bomb) && !bombExplosions.length,'classic has no bombs');
+        """)
+
+    def test_bomb_trigger_on_enemy_step_and_player_obstacle_rules(self):
+        self.check("""
+          gameMode='battle';startGame();clearTimeout(timer);obstacles=[];
+          snake=[{x:8,y:10}];previousSnake=snake.map(p=>({...p}));
+          const enemy={x:11,y:10,hits:0,aggression:1,stunnedUntil:0,nextMoveAt:gameTime};
+          battleEnemies=[enemy];obstacles=[{x:10,y:10,bomb:true}];
+          updateBattleEnemies();assert(enemy.x===10 && enemy.hits===1 && !obstacles.length,'enemy step detonates');
+          for(const power of [null,'drill','super']) {
+            startGame();clearTimeout(timer);battleEnemies=[];battlePendingSpawns=0;
+            snake=[{x:8,y:10}];direction={x:1,y:0};nextDirection=direction;directionQueue=[];
+            obstacles=[{x:9,y:10,bomb:true}];food={x:0,y:0,type:'normal'};
+            if(power) powers[power]=gameTime+10000;
+            tick();assert(over===!power,'bomb uses obstacle collision '+power);
+            assert(obstacles.some(o=>o.bomb),'player does not detonate bomb');
+          }
+        """)
+
     def test_frost_cone_damage_freeze_wrap_and_shrink(self):
         self.check("""
           gameMode='battle';startGame();clearInterval(timer);obstacles=[];
@@ -791,9 +827,9 @@ class GameTests(unittest.TestCase):
           battleBurgers=9;food={x:2,y:10,type:'normal'};collectFood();
           assert(battleBurgers===0 && snake.length===4,'tenth burger resets size');
           assert(battleEnemies[0].hits===2 && battleEnemies[1].hits===1,'front/back damage');
-          assert(battleEnemies[2].hits===0 && battleEnemies[3].hits===0,'cone and range');
+          assert(battleEnemies[2].hits===0 && battleEnemies[3].hits===1,'whole directional cone');
           assert(battleEnemies[0].frozenUntil===gameTime+3000,'ice duration');
-          assert(frostBreath && frostBreath.length===9,'animation');
+          assert(frostBreath && frostBreath.length>=10,'animation reaches final target');
           const pos={...battleEnemies[0]};gameTime+=1000;updateBattleEnemies();
           assert(same(pos,battleEnemies[0]),'frozen enemy stays still');
           draw();

@@ -318,6 +318,7 @@ let battleWave = 0;
 let battleBurgers = 0;
 let battleRewards = 0;
 let frostBreath = null;
+let bombExplosions = [];
 const INITIAL_SNAKE_LENGTH = 4;
 let battleEnemies = [];
 let battlePendingSpawns = 0;
@@ -354,7 +355,7 @@ function activateBurgerRow() {
   const options=clear.length?clear:rows;
   const y=options[Math.floor(Math.random()*options.length)];
   obstacles=obstacles.filter(p=>p.y!==y);sceneCacheKey='';
-  cheatFoods=Array.from({length:COLS},(_,x)=>({x,y,id:++foodSerial,type:'normal'}));
+  cheatFoods=Array.from({length:COLS},(_,x)=>({x,y,id:++foodSerial,type:'super'}));
   food=cheatFoods[0];previousFood=null;updateStatus();
   return true;
 }
@@ -544,8 +545,11 @@ function startBattleWave() {
 
 function updateBattleEnemies() {
   fillBattleWave();
-  for(const enemy of battleEnemies) {
+  for(const enemy of [...battleEnemies]) {
+    if(!battleEnemies.includes(enemy)) continue;
     if(enemy.stunnedUntil>gameTime) continue;
+    const underfoot=obstacles.find(o=>o.bomb && same(o,enemy));
+    if(underfoot) {explodeBomb(underfoot);if(!battleEnemies.includes(enemy)) continue;}
     if(same(enemy,snake[0]) && !hasPower('super')) {endGame();return;}
     const from={x:enemy.x,y:enemy.y};
     let moved=false;
@@ -555,10 +559,29 @@ function updateBattleEnemies() {
       moves.sort((a,b)=>torusDistance(a,snake[0])-torusDistance(b,snake[0]));
       if(moves.length) {Object.assign(enemy,moves[0]);moved=true;}
       enemy.nextMoveAt+=enemyInterval(enemy);
+      const bomb=obstacles.find(o=>o.bomb && same(o,enemy));
+      if(bomb) {
+        explodeBomb(bomb);
+        if(!battleEnemies.includes(enemy)) break;
+      }
       if(same(enemy,snake[0]) && !hasPower('super')) {endGame();return;}
     }
     if(moved) enemy.motion={from,startedAt:performance.now(),duration:Math.min(currentSpeed,enemyInterval(enemy))};
   }
+}
+
+function explodeBomb(bomb) {
+  if(gameMode!=='battle' || !obstacles.includes(bomb) || !bomb.bomb) return;
+  obstacles=obstacles.filter(o=>o!==bomb);sceneCacheKey='';
+  bombExplosions=bombExplosions.filter(effect=>effect.until>gameTime);
+  bombExplosions.push({x:bomb.x,y:bomb.y,startedAt:gameTime,until:gameTime+700});
+  playEffect('laser');
+  const victims=battleEnemies.filter(enemy=> {
+    const vector=frostVector(bomb,enemy);
+    return Math.hypot(vector.x,vector.y)<=15;
+  });
+  victims.forEach(enemy=>damageBattleEnemy(enemy,1,0));
+  finishBattleAttack();
 }
 
 function laserTarget() {
@@ -602,10 +625,13 @@ function addScore(amount) {
   refreshSpeed();
 }
 
-function damageBattleEnemy(enemy,damage) {
+function damageBattleEnemy(enemy,damage,stun=3000) {
+  if(!battleEnemies.includes(enemy)) return;
   enemy.hits=Math.min(3,enemy.hits+damage);
-  enemy.stunnedUntil=gameTime+3000;
-  enemy.nextMoveAt=enemy.stunnedUntil+enemyInterval(enemy);
+  if(stun) {
+    enemy.stunnedUntil=gameTime+stun;
+    enemy.nextMoveAt=enemy.stunnedUntil+enemyInterval(enemy);
+  }
   if(enemy.hits>=3) {
     battleEnemies=battleEnemies.filter(e=>e!==enemy);
     if(enemy.aggression===3) battleRewards++;
@@ -628,13 +654,14 @@ function releaseFrostBreath() {
   previousSnake=previousSnake.slice(0,INITIAL_SNAKE_LENGTH);
   if(!target) return;
   const from={...snake[0]}, vector=frostVector(from,target);
-  const angle=Math.atan2(vector.y,vector.x), length=9;
-  frostBreath={from,angle,length,startedAt:gameTime,until:gameTime+900};
+  const angle=Math.atan2(vector.y,vector.x);
   const victims=battleEnemies.map(enemy=>({enemy,v:frostVector(from,enemy)}))
     .filter(({v})=> {
       const distance=Math.hypot(v.x,v.y);
-      return distance<=length && (distance===0 || (v.x*Math.cos(angle)+v.y*Math.sin(angle))/distance>=Math.cos(Math.PI/6));
+      return (distance===0 || (v.x*Math.cos(angle)+v.y*Math.sin(angle))/distance>=Math.cos(Math.PI/6));
     }).sort((a,b)=>Math.hypot(a.v.x,a.v.y)-Math.hypot(b.v.x,b.v.y));
+  const length=Math.max(9,...victims.map(({v})=>Math.hypot(v.x,v.y)));
+  frostBreath={from,angle,length,startedAt:gameTime,until:gameTime+900};
   victims.forEach(({enemy},i)=>{damageBattleEnemy(enemy,i===0?2:1);enemy.frozenUntil=gameTime+3000;});
   finishBattleAttack();
 }
@@ -945,6 +972,7 @@ function startGame() {
   battleBurgers = 0;
   battleRewards = 0;
   frostBreath = null;
+  bombExplosions = [];
   battlePendingSpawns = 0;
   battleEnemyId = 0;
   pendingPlanktons = 0;
@@ -1088,6 +1116,9 @@ function generateObstacles(count) {
     }
   }
 
+  if(gameMode==='battle') generated.forEach((obstacle,index)=>{
+    if(index%5===0) obstacle.bomb=true;
+  });
   obstacles = generated;
 }
 // =====================================
@@ -1582,7 +1613,7 @@ function startAnimation() {
 // =====================================
 
 function paintCachedScene() {
-  const key = `${COLS}:${ROWS}:${scenePhase}:${obstaclePhase}:${canvas.width}:${canvas.height}:${obstacles.map(cellKey).join(',')}`;
+  const key = `${COLS}:${ROWS}:${scenePhase}:${obstaclePhase}:${canvas.width}:${canvas.height}:${obstacles.map(o=>`${cellKey(o)}:${o.bomb?1:0}`).join(',')}`;
   if (key !== sceneCacheKey) {
     sceneLayer.width = canvas.width; sceneLayer.height = canvas.height;
     const target = sceneLayer.getContext('2d');
@@ -1640,7 +1671,8 @@ function drawStaticScene() {
   // Obstáculos
   obstacles.forEach((o, i) => {
     const kind = (i + scenePhase) % 4;
-    if (kind === 0) drawRock(o.x * CELL, o.y * CELL, i);
+    if(o.bomb) drawBomb(o.x*CELL,o.y*CELL);
+    else if (kind === 0) drawRock(o.x * CELL, o.y * CELL, i);
     else drawHouse(o.x * CELL, o.y * CELL, kind);
   });
 
@@ -1695,6 +1727,7 @@ function draw(alpha = movementProgress(), now = performance.now()) {
     });
   }
 
+  drawBombExplosions(alpha);
   drawFrostBreath(alpha);
   drawPlankton(now);
 
@@ -1854,6 +1887,30 @@ function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
     ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(eye.x,eye.y,1.5,0,Math.PI*2);ctx.fill();
   }
   ctx.restore();
+}
+
+function drawBomb(x,y) {
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle='#17283b';ctx.strokeStyle='#ffab55';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(10,12,7,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.strokeStyle='#ffe9a4';ctx.beginPath();ctx.moveTo(10,5);ctx.quadraticCurveTo(9,0,15,2);ctx.stroke();
+  ctx.fillStyle='#ff593e';ctx.beginPath();ctx.arc(15,2,2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#ffbb72';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('!',10,15);
+  ctx.restore();
+}
+
+function drawBombExplosions(alpha) {
+  bombExplosions=bombExplosions.filter(effect=>effect.until>gameTime);
+  for(const effect of bombExplosions) {
+    const age=gameTime+(!paused && !over?alpha*motionDuration:0)-effect.startedAt;
+    const progress=Math.max(0,Math.min(1,age/700));
+    const radius=Math.max(1,15*CELL*progress);
+    for(const dx of [-BOARD_WIDTH,0,BOARD_WIDTH]) for(const dy of [-BOARD_HEIGHT,0,BOARD_HEIGHT]) {
+      ctx.save();ctx.globalAlpha=(1-progress)*.35;
+      ctx.strokeStyle='#ffbd58';ctx.fillStyle='rgba(255,117,41,.25)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc((effect.x+.5)*CELL+dx,(effect.y+.5)*CELL+dy,radius,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();
+    }
+  }
 }
 
 function drawFrostBreath(alpha) {

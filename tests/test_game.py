@@ -736,6 +736,45 @@ class GameTests(unittest.TestCase):
         self.page.wait_for_function('!document.fullscreenElement')
         self.assertTrue(self.page.locator('#menu').is_visible())
 
+    def test_frost_cone_damage_freeze_wrap_and_shrink(self):
+        self.check("""
+          gameMode='battle';startGame();clearInterval(timer);obstacles=[];
+          snake=Array.from({length:14},(_,i)=>({x:2,y:10+i%8}));
+          previousSnake=snake.map(p=>({...p}));
+          const make=(x,y)=>({x,y,hits:0,aggression:1,stunnedUntil:0,nextMoveAt:99999});
+          battleEnemies=[make(4,10),make(8,11),make(8,16),make(12,10)];
+          battleBurgers=9;food={x:2,y:10,type:'normal'};collectFood();
+          assert(battleBurgers===0 && snake.length===4,'tenth burger resets size');
+          assert(battleEnemies[0].hits===2 && battleEnemies[1].hits===1,'front/back damage');
+          assert(battleEnemies[2].hits===0 && battleEnemies[3].hits===0,'cone and range');
+          assert(battleEnemies[0].frozenUntil===gameTime+3000,'ice duration');
+          assert(frostBreath && frostBreath.length===9,'animation');
+          const pos={...battleEnemies[0]};gameTime+=1000;updateBattleEnemies();
+          assert(same(pos,battleEnemies[0]),'frozen enemy stays still');
+          draw();
+          snake=[{x:0,y:10}];battleEnemies=[make(COLS-2,10),make(COLS-5,11)];
+          releaseFrostBreath();
+          assert(battleEnemies[0].hits===2 && battleEnemies[1].hits===1,'cone crosses portals');
+        """)
+
+    def test_battle_ice_kills_rewards_and_individual_health(self):
+        self.check("""
+          gameMode='battle';startGame();clearInterval(timer);obstacles=[];
+          snake=[{x:2,y:10}];
+          battleEnemies=[{x:4,y:10,hits:1,aggression:3,stunnedUntil:0},
+                         {x:6,y:10,hits:2,aggression:3,stunnedUntil:0}];
+          const previousWave=battleWave;
+          releaseFrostBreath();
+          assert(battleWave===previousWave+1 && battleRewards===2,'multi kill rewards and one new wave');
+          assert(chooseFoodType()==='super' && battleRewards===1,'yellow reward');
+          food={...snake[0],type:'super'};collectFood();
+          assert(hasPower('super'),'reward grants original immunity');
+          updateStatus();assert(bossHealth.hidden,'global health hidden in battle');draw();
+          gameMode='classic';startGame();clearInterval(timer);
+          battleBurgers=9;food={...snake[0],type:'normal'};collectFood();
+          assert(battleBurgers===9 && !frostBreath,'classic has no breath');
+        """)
+
     def test_battle_mode_can_be_selected_from_menu_on_mobile(self):
         self.page.set_viewport_size({'width':390,'height':844})
         self.page.reload(wait_until='domcontentloaded')
@@ -770,6 +809,7 @@ class GameTests(unittest.TestCase):
               for(let hit=1;hit<=3;hit++) {
                 const target=laserTarget();
                 const oldHits=target.hits;
+                battleBurgers=0;
                 food={...snake[0],type:'red'};collectFood();
                 assert(target.hits===oldHits+1,'nearest target receives ray');
                 assert(target.stunnedUntil===gameTime+3000,'stun');

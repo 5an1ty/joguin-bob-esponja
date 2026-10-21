@@ -315,6 +315,10 @@ let character = 'bob';
 let difficulty = 'easy';
 let gameMode = 'classic';
 let battleWave = 0;
+let battleBurgers = 0;
+let battleRewards = 0;
+let frostBreath = null;
+const INITIAL_SNAKE_LENGTH = 4;
 let battleEnemies = [];
 let battlePendingSpawns = 0;
 let battleEnemyId = 0;
@@ -450,7 +454,7 @@ function updateStatus() {
   }
   const defeated = beam?.defeated && beam.until > gameTime;
   const enemies=activeEnemies();
-  bossHealth.hidden = !enemies.length && !defeated;
+  bossHealth.hidden = gameMode==='battle' || (!enemies.length && !defeated);
   bossHealth.max = gameMode==='battle' ? battleProfile(battleWave).count*3 : 3;
   bossHealth.value = enemies.reduce((hp,enemy)=>hp+Math.max(0,3-enemy.hits),0);
   const bossLabel = gameMode==='battle'
@@ -467,6 +471,9 @@ function activePowerTypes() {
 }
 
 function chooseFoodType(roll = Math.random(), powerRoll = Math.random()) {
+  if(gameMode==='battle' && battleRewards>0 && (hasPower('super') || activePowerTypes().length<MAX_ACTIVE_POWERS)) {
+    battleRewards--;return 'super';
+  }
   if (activeEnemies().length) return bossNextFood;
   if (activePowerTypes().length >= MAX_ACTIVE_POWERS) return 'normal';
   if (roll >= settings[difficulty].specialChance) return 'normal';
@@ -576,6 +583,43 @@ function addScore(amount) {
   refreshSpeed();
 }
 
+function damageBattleEnemy(enemy,damage) {
+  enemy.hits=Math.min(3,enemy.hits+damage);
+  enemy.stunnedUntil=gameTime+3000;
+  enemy.nextMoveAt=enemy.stunnedUntil+enemyInterval(enemy);
+  if(enemy.hits>=3) {
+    battleEnemies=battleEnemies.filter(e=>e!==enemy);
+    if(enemy.aggression===3) battleRewards++;
+    addScore(50);
+  }
+}
+
+function finishBattleAttack() {
+  if(!battleEnemies.length && !battlePendingSpawns) startBattleWave();
+}
+
+function frostVector(from,to) {
+  const delta=(a,b,size)=>((b-a+size*1.5)%size)-size/2;
+  return {x:delta(from.x,to.x,COLS),y:delta(from.y,to.y,ROWS)};
+}
+
+function releaseFrostBreath() {
+  const target=laserTarget();
+  snake=snake.slice(0,INITIAL_SNAKE_LENGTH);
+  previousSnake=previousSnake.slice(0,INITIAL_SNAKE_LENGTH);
+  if(!target) return;
+  const from={...snake[0]}, vector=frostVector(from,target);
+  const angle=Math.atan2(vector.y,vector.x), length=9;
+  frostBreath={from,angle,length,startedAt:gameTime,until:gameTime+900};
+  const victims=battleEnemies.map(enemy=>({enemy,v:frostVector(from,enemy)}))
+    .filter(({v})=> {
+      const distance=Math.hypot(v.x,v.y);
+      return distance<=length && (distance===0 || (v.x*Math.cos(angle)+v.y*Math.sin(angle))/distance>=Math.cos(Math.PI/6));
+    }).sort((a,b)=>Math.hypot(a.v.x,a.v.y)-Math.hypot(b.v.x,b.v.y));
+  victims.forEach(({enemy},i)=>{damageBattleEnemy(enemy,i===0?2:1);enemy.frozenUntil=gameTime+3000;});
+  finishBattleAttack();
+}
+
 function collectFood() {
   playEffect('collect');
   const type = food.type || 'normal';
@@ -587,18 +631,16 @@ function collectFood() {
   const target=laserTarget();
   if (type === 'red' && target) {
     playEffect('laser');
-    beam={from:{...snake[0]},to:{...target},until:gameTime+400};
-    target.hits++;
-    beam.defeated=target.hits>=3;
-    target.stunnedUntil=gameTime+3000;
-    if(gameMode==='battle') target.nextMoveAt=target.stunnedUntil+enemyInterval(target);
-    if(target.hits>=3) {
-      if(gameMode==='battle') {
-        battleEnemies=battleEnemies.filter(enemy=>enemy!==target);
-        addScore(50);
-        if(!battleEnemies.length && !battlePendingSpawns) startBattleWave();
-      } else {plankton=null;addScore(50);}
+    beam={from:{...snake[0]},to:{...target},until:gameTime+400,defeated:target.hits+1>=3};
+    if(gameMode==='battle') {
+      damageBattleEnemy(target,1);finishBattleAttack();
+    } else {
+      target.hits++;target.stunnedUntil=gameTime+3000;
+      if(target.hits>=3) {plankton=null;addScore(50);}
     }
+  }
+  if(gameMode==='battle' && ++battleBurgers>=10) {
+    battleBurgers=0;releaseFrostBreath();
   }
   addScore(10);
   return placeFood();
@@ -880,6 +922,9 @@ function startGame() {
   plankton = null;
   battleEnemies = [];
   battleWave = 0;
+  battleBurgers = 0;
+  battleRewards = 0;
+  frostBreath = null;
   battlePendingSpawns = 0;
   battleEnemyId = 0;
   pendingPlanktons = 0;
@@ -1618,6 +1663,7 @@ function draw(alpha = movementProgress(), now = performance.now()) {
     });
   }
 
+  drawFrostBreath(alpha);
   drawPlankton(now);
 
   // Interpolação contínua entre passos; a lógica de colisão continua na grade.
@@ -1778,6 +1824,30 @@ function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
   ctx.restore();
 }
 
+function drawFrostBreath(alpha) {
+  if(!frostBreath || frostBreath.until<=gameTime) return;
+  const age=gameTime+(!paused && !over ? alpha*motionDuration : 0)-frostBreath.startedAt;
+  const progress=Math.max(0,Math.min(1,age/900));
+  const radius=frostBreath.length*CELL*Math.min(1,progress*3);
+  // Repeat at portal edges so the visible cone agrees with toroidal hit detection.
+  for(const dx of [-BOARD_WIDTH,0,BOARD_WIDTH]) for(const dy of [-BOARD_HEIGHT,0,BOARD_HEIGHT]) {
+    const x=(frostBreath.from.x+.5)*CELL+dx,y=(frostBreath.from.y+.5)*CELL+dy;
+    ctx.save();ctx.translate(x,y);ctx.rotate(frostBreath.angle);
+    ctx.globalAlpha=(1-progress)*.55;
+    const gradient=ctx.createRadialGradient(0,0,0,0,0,Math.max(1,radius));
+    gradient.addColorStop(0,'#efffff');gradient.addColorStop(1,'#60caff');ctx.fillStyle=gradient;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,radius,-Math.PI/6,Math.PI/6);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#e9ffff';ctx.lineWidth=1;
+    for(let i=0;i<14;i++) {
+      const theta=((i%5)/4-.5)*Math.PI/3;
+      const r=radius*((i*7%13)+1)/14;
+      const px=Math.cos(theta)*r,py=Math.sin(theta)*r;
+      ctx.beginPath();ctx.moveTo(px-2,py);ctx.lineTo(px+2,py);ctx.moveTo(px,py-2);ctx.lineTo(px,py+2);ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 function drawPlankton(now = performance.now()) {
   for(const enemy of activeEnemies()) drawEnemy(enemy,now);
 }
@@ -1788,7 +1858,11 @@ function drawEnemy(enemy,now) {
   const position = interpolateCell(motion?.from || enemy,enemy,alpha);
   paintWrapped(position, (x,y) => {
   ctx.save();ctx.translate(x,y);
-  ctx.fillStyle=enemyColor(enemy);
+  if(gameMode==='battle') {
+    ctx.fillStyle='rgba(4,30,49,.85)';ctx.fillRect(1,-6,18,4);
+    ctx.fillStyle='#92ed76';ctx.fillRect(2,-5,16*Math.max(0,3-enemy.hits)/3,2);
+  }
+  ctx.fillStyle=enemy.frozenUntil>gameTime ? '#a8efff' : enemyColor(enemy);
   if(enemy.stunnedUntil>gameTime) {ctx.shadowColor='#66e6ff';ctx.shadowBlur=8;}
   roundRect(4,3,12,16,5);ctx.fill();
   ctx.strokeStyle='#224e24';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(6,4);ctx.lineTo(2,0);ctx.moveTo(14,4);ctx.lineTo(18,0);ctx.stroke();

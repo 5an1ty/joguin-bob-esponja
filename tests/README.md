@@ -50,3 +50,7 @@ Também são testados os controles independentes de música, efeitos e silêncio
 A Batalha é validada até a onda máxima, incluindo contagem e cores de inimigos,
 velocidade, perseguição, paralisia, alvo do laser e vida do grupo. As cinco músicas
 são decodificadas no navegador e a troca exploração/chefe é testada por dificuldade.
+
+O sopro congelante é testado com alcance e ângulo do cone, dano frontal/traseiro,
+congelamento, portais, retorno ao tamanho inicial e recompensas por derrotas
+simultâneas. O modo clássico permanece sem essas mecânicas exclusivas da Batalha.

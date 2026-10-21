@@ -786,6 +786,55 @@ class GameTests(unittest.TestCase):
           assert(!obstacles.some(p=>p.y===cheatFoods[0].y),'rocks cleared from row');
         """)
 
+    def test_battle_health_thresholds_damage_and_health_bar(self):
+        self.check("""
+          for(const [wave,expected] of [[1,[3,3,3]],[2,[3,3,3]],[3,[4,3,3]],[5,[4,3,3]],[6,[5,4,3]],[30,[5,4,3]]])
+            for(let aggression=1;aggression<=3;aggression++)
+              assert(battleHealth(wave,aggression)===expected[aggression-1],'health table');
+          gameMode='battle';startGame();clearTimeout(timer);obstacles=[];
+          battleWave=6;battleEnemies=[];startBattleWave();
+          assert(battleWave===7 && battleEnemies.every(e=>e.maxHealth===5),'spawn health saved');
+          const enemy=laserTarget();
+          for(let i=1;i<=4;i++) {food={...snake[0],type:'red'};collectFood();assert(battleEnemies.includes(enemy),'survives four hits');assert(!beam.defeated,'beam uses actual health');}
+          const widths=[],original=ctx.fillRect;
+          ctx.fillRect=function(x,y,width,height){if(y===-5 && height===2)widths.push(width);return original.call(this,x,y,width,height);};
+          try {drawEnemy(enemy,performance.now());} finally {ctx.fillRect=original;}
+          assert(widths.some(width=>Math.abs(width-16/5)<.001),'individual life fraction');
+          food={...snake[0],type:'red'};collectFood();assert(!battleEnemies.includes(enemy) && beam.defeated,'fifth hit defeats');
+        """)
+
+    def test_sandy_charge_stacks_and_requires_two_kills(self):
+        self.check("""
+          gameMode='battle';character='sandy';startGame();clearTimeout(timer);obstacles=[];
+          assert(sandyUses===2 && !karateArmed,'two ready uses');
+          const enemy={...snake[0],hits:0,maxHealth:3,aggression:1,stunnedUntil:0};battleEnemies=[enemy];
+          assert(useAbility() && sandyUses===1 && !useAbility(),'one use per arm');
+          resolveEnemyContact(enemy);assert(enemy.hits===2 && !karateArmed,'first hit');
+          assert(useAbility() && sandyUses===0,'second use');resolveEnemyContact(enemy);
+          assert(sandyUses===0 && sandyRechargeKills===1 && !useAbility(),'one kill insufficient');
+          const kill=()=>{const e={x:0,y:0,hits:0,maxHealth:3,aggression:1};battleEnemies.push(e);damageBattleEnemy(e,3);};
+          kill();assert(sandyUses===1 && sandyRechargeKills===0,'second kill restores one');
+          for(let i=0;i<4;i++)kill();assert(sandyUses===3 && sandyRechargeKills===0,'stacks to three');
+          kill();assert(sandyUses===3 && sandyRechargeKills===0,'no hidden credit beyond cap');
+          updateAbilityButton();assert(document.getElementById('abilityBtn').textContent.includes('3/3'),'visible charges');
+          assert(useAbility() && sandyUses===2,'spend after cap');
+          startGame();clearTimeout(timer);assert(sandyUses===2 && sandyRechargeKills===0,'restart resets');
+        """)
+
+    def test_battle_speed_constant_except_temporary_turbo(self):
+        self.check("""
+          for(const level of ['easy','medium','hard']) {
+            gameMode='battle';difficulty=level;startGame();clearTimeout(timer);
+            const initial=currentSpeed;
+            for(const phase of [1,3,10,100]) {scenePhase=phase;refreshSpeed();assert(currentSpeed===initial,'constant battle speed');}
+            addScore(250);assert(currentSpeed===initial,'points do not accelerate');
+            powers.super=gameTime+6000;refreshSpeed();assert(currentSpeed<initial,'yellow turbo retained');
+            gameTime+=6001;refreshSpeed();assert(currentSpeed===initial,'returns to fixed base');
+          }
+          gameMode='classic';startGame();clearTimeout(timer);const initial=currentSpeed;
+          scenePhase=5;refreshSpeed();assert(currentSpeed<initial,'classic progression retained');
+        """)
+
     def test_classic_difficulty_score_multipliers(self):
         self.check("""
           for(const [level,multiplier] of [['easy',1],['medium',2],['hard',3]]) {
@@ -848,10 +897,10 @@ class GameTests(unittest.TestCase):
     def test_first_battle_tutorial_pauses_at_start_and_first_kill_only(self):
         self.check("""
           localStorage.removeItem('bobSnakeBattleTutorialSeen');gameMode='battle';startGame();
-          assert(paused && document.getElementById('overlayTitle').textContent.includes('poderes'),'intro pauses');
+          assert(paused && document.getElementById('overlayTitle').textContent.includes('Controles e Habilidades'),'intro pauses');
           togglePause();clearTimeout(timer);obstacles=[];
           damageBattleEnemy(battleEnemies[0],3);finishBattleAttack();tick();
-          assert(paused && document.getElementById('overlayTitle').textContent.includes('Primeiro'),'first kill pauses');
+          assert(paused && document.getElementById('overlayTitle').textContent.includes('Como Funcionam as Ondas'),'first kill pauses');
           assert(localStorage.getItem('bobSnakeBattleTutorialSeen')==='true','remember tutorial');
           startGame();clearTimeout(timer);assert(!paused && !tutorialFirstKillPending,'not repeated');
         """)
@@ -1031,7 +1080,8 @@ class GameTests(unittest.TestCase):
             assert(ids.size===battleEnemies.length,'distinct spawn positions');
             const victims=[...battleEnemies];
             for(const enemy of victims) {
-              for(let hit=1;hit<=3;hit++) {
+              const hitsNeeded=enemyMaxHealth(laserTarget());
+              for(let hit=1;hit<=hitsNeeded;hit++) {
                 const target=laserTarget();
                 const oldHits=target.hits;
                 battleBurgers=0;

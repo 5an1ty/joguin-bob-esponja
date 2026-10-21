@@ -71,3 +71,8 @@ com entrada em tela cheia e botão Power. As habilidades de Bob, Patrick e Sandy
 são verificadas com recarga, colisões, dano, sons sintetizados e exclusão dos abates
 da bomba especial na recarga. Também são cobertos os multiplicadores do Clássico,
 a exclusividade da Sandy na Batalha e o tutorial que pausa no primeiro abate.
+
+O balanceamento da Batalha cobre os limites das ondas 3 e 6, vida por cor,
+barras proporcionais e raios até a derrota. A recarga da Sandy é validada com
+2 usos iniciais, 1 uso por 2 abates e teto de 3, sem guardar crédito além do teto.
+A velocidade base constante da Batalha e o turbo temporário também são testados.

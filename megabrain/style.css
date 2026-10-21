@@ -240,3 +240,5 @@ footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18
 
 .pause-start-actions{display:flex;gap:8px;margin:8px 0}.pause-start-actions button{margin:0;min-height:44px;font-size:12px;padding:8px}
 @media(max-width:900px){.overlay-icon{font-size:24px}.overlay h2{font-size:19px}}
+
+#overlayText{font-size:13px;color:#597184;line-height:1.5;margin:12px 0}.tutorial-list{text-align:left;padding-left:18px;margin:0}.tutorial-list li+li{margin-top:8px}

@@ -321,6 +321,8 @@ let battleKills = 0;
 let abilityReadyAt = 0;
 let patrickCharge = 2;
 let karateArmed = false;
+let sandyUses = 2;
+let sandyRechargeKills = 0;
 let sandyImmuneUntil = 0;
 let abilityAnimation = null;
 let tutorialFirstKillPending = false;
@@ -435,7 +437,7 @@ function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMov
 }
 
 function refreshSpeed() {
-  const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, scenePhase));
+  const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, gameMode==='battle'?0:scenePhase));
   const speed = (hasPower('super') ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1);
   if (speed !== currentSpeed) {
     currentSpeed = speed;
@@ -488,8 +490,8 @@ function updateStatus() {
   const defeated = beam?.defeated && beam.until > gameTime;
   const enemies=activeEnemies();
   bossHealth.hidden = gameMode==='battle' || (!enemies.length && !defeated);
-  bossHealth.max = gameMode==='battle' ? battleProfile(battleWave).count*3 : 3;
-  bossHealth.value = enemies.reduce((hp,enemy)=>hp+Math.max(0,3-enemy.hits),0);
+  bossHealth.max = gameMode==='battle' ? enemies.reduce((total,enemy)=>total+enemyMaxHealth(enemy),0) : 3;
+  bossHealth.value = enemies.reduce((hp,enemy)=>hp+Math.max(0,enemyMaxHealth(enemy)-enemy.hits),0);
   const bossLabel = gameMode==='battle'
     ? `⚔ Onda ${battleWave} · Abates ${battleKills} · Recorde ${battleBest}`
     : plankton
@@ -524,6 +526,12 @@ function battleProfile(wave) {
   };
 }
 
+function battleHealth(wave,aggression) {
+  if(wave>=6) return {1:5,2:4,3:3}[aggression];
+  return wave>=3 && aggression===1 ? 4 : 3;
+}
+function enemyMaxHealth(enemy) {return enemy.maxHealth || 3;}
+
 function enemyColor(enemy) {
   return ['#80c22f','#f5a23b','#ed4662'][(enemy.aggression || 1)-1];
 }
@@ -543,7 +551,7 @@ function fillBattleWave() {
   }
   while(battlePendingSpawns>0 && candidates.length) {
     const pos=candidates.splice(Math.floor(Math.random()*candidates.length),1)[0];
-    const enemy={...pos,id:++battleEnemyId,hits:0,stunnedUntil:0,aggression:profile.aggression,motion:null};
+    const enemy={...pos,id:++battleEnemyId,hits:0,stunnedUntil:0,aggression:profile.aggression,maxHealth:battleHealth(battleWave,profile.aggression),motion:null};
     enemy.nextMoveAt=gameTime+enemyInterval(enemy);
     battleEnemies.push(enemy);battlePendingSpawns--;
   }
@@ -613,10 +621,10 @@ function updateAbilityButton() {
   let status='Pronto';
   if(character==='bob' && abilityReadyAt>gameTime) status=`${Math.ceil((abilityReadyAt-gameTime)/1000)}s`;
   if(character==='patrick' && patrickCharge<2) status=`${patrickCharge}/2 abates`;
-  if(character==='sandy' && karateArmed) status='Karate armado';
+  if(character==='sandy') status=karateArmed ? `Karatê armado · ${sandyUses}/3` : `${sandyUses}/3 usos${sandyUses<3?` · ${sandyRechargeKills}/2 abates`:''}`;
   button.textContent=`Power · ${status}`;
   button.setAttribute('aria-label',`Poder de ${character}: ${status}. Tecla C`);
-  button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<2) || (character==='sandy' && karateArmed);
+  button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<2) || (character==='sandy' && (karateArmed || sandyUses===0));
 }
 function useAbility() {
   if(gameMode!=='battle' || paused || over || !menu.classList.contains('hidden')) return false;
@@ -633,17 +641,34 @@ function useAbility() {
     if(patrickCharge<2 || obstacles.some(o=>same(o,head))) return false;
     obstacles.push({...head,bomb:true,owner:'patrick'});sceneCacheKey='';patrickCharge=0;playEffect('plantBomb');
   } else {
-    if(karateArmed) return false;
-    karateArmed=true;playEffect('karateReady');
+    if(karateArmed || sandyUses===0) return false;
+    sandyUses--;karateArmed=true;playEffect('karateReady');
   }
   updateStatus();return true;
 }
 function showBattleTutorial(stage) {
   if(!paused) togglePause();
-  document.getElementById('overlayTitle').textContent=stage==='intro'?'Batalha: poderes e bombas':'Primeiro Plankton derrotado!';
-  document.getElementById('overlayText').textContent=stage==='intro'
-    ? ({bob:'C ou Power: gire a espátula e crie um hambúrguer amarelo à frente. Recarga: 30s.',patrick:'C ou Power: plante uma bomba que atinge toda a arena. Você pode pisar nela. Recarga: 2 abates que não sejam dessa bomba.',sandy:'C ou Power: arme o karate. O próximo contato causa 2 de dano, paralisa o Plankton e dá 3s de imunidade.'})[character]+' Bombas comuns explodem quando Plankton pisa. A cada 10 hambúrgueres, você solta um sopro congelante.'
-    : 'Cada Plankton tem 3 de vida. Ao derrotar todos, começa outra onda: primeiro duelos mais agressivos, depois grupos crescentes até 10 inimigos. As cores verde, laranja e vermelho indicam a agressividade. Hambúrgueres vermelhos disparam raios; derrotar um Plankton vermelho dá um hambúrguer amarelo.';
+  document.getElementById('overlayTitle').textContent=stage==='intro'?'Tutorial 1: Controles e Habilidades':'Tutorial 2: Como Funcionam as Ondas';
+  const ability={
+    bob:'Espátula: aperte C (PC) ou Power (celular) para girar a espátula e criar um hambúrguer amarelo à frente. Recarga: 30 segundos.',
+    patrick:'Bomba especial: aperte C (PC) ou Power (celular) para plantar uma bomba que atinge toda a arena. Você é imune inclusive à colisão dela. Começa pronta; recarrega com 2 abates de outras fontes.',
+    sandy:'Ataque de Karatê: aperte C (PC) ou Power (celular). O próximo golpe causa 2 de dano, paralisa o Plankton e te deixa invencível por 3 segundos. Você começa com 2 usos e recupera 1 a cada 2 abates, até 3 usos.'
+  };
+  const items=stage==='intro' ? [ability[character],
+    'Armadilhas: bombas no chão explodem quando um Plankton pisa nelas.',
+    'Poder Congelante: a cada 10 hambúrgueres coletados, você solta um sopro que congela os inimigos!'
+  ] : [
+    'Inimigos: a cor mostra quem é mais perigoso (Verde, Laranja e Vermelho).',
+    'Hambúrguer vermelho atira raios.',
+    'Derrotar um Plankton vermelho dá um hambúrguer amarelo (imunidade e + velocidade).',
+    'Ondas 1 e 2: todos têm 3 de vida.',
+    'Ondas 3 a 5: Verde tem 4 de vida; Laranja e Vermelho têm 3 de vida.',
+    'Onda 6 em diante: Verde tem 5 de vida; Laranja tem 4 de vida; Vermelho tem 3 de vida.',
+    'Progressão: a cada onda derrotada, vem um novo grupo de inimigos (até 10 por vez).'
+  ];
+  const list=document.createElement('ul');list.className='tutorial-list';
+  for(const text of items) {const item=document.createElement('li');item.textContent=text;list.appendChild(item);}
+  document.getElementById('overlayText').replaceChildren(list);
   if(stage==='wave') {tutorialKillPending=false;localStorage.setItem('bobSnakeBattleTutorialSeen','true');}
   updateAbilityButton();
 }
@@ -653,7 +678,7 @@ function updateCharacterChoices() {
     button.hidden=button.dataset.character==='sandy' && gameMode!=='battle';
     const selected=button.dataset.character===character;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));
     button.querySelector('small').textContent=gameMode==='battle'
-      ? ({bob:'Espátula: hambúrguer amarelo · recarga 30s',patrick:'Bomba na arena inteira · recarga 2 abates',sandy:'Karate: dano 2 + paralisia + imunidade 3s'})[button.dataset.character]
+      ? ({bob:'Espátula: hambúrguer amarelo · recarga 30s',patrick:'Bomba na arena inteira · recarga 2 abates',sandy:'Karatê: 2 usos iniciais · +1 a cada 2 abates · máximo 3'})[button.dataset.character]
       : ({bob:'O otimista da Fenda',patrick:'O amigo estrela-do-mar'})[button.dataset.character] || '';
   });
 }
@@ -702,15 +727,19 @@ function addScore(amount) {
 
 function damageBattleEnemy(enemy,damage,stun=3000,source='normal') {
   if(!battleEnemies.includes(enemy)) return;
-  enemy.hits=Math.min(3,enemy.hits+damage);
+  enemy.hits=Math.min(enemyMaxHealth(enemy),enemy.hits+damage);
   if(stun) {
     enemy.stunnedUntil=gameTime+stun;
     enemy.nextMoveAt=enemy.stunnedUntil+enemyInterval(enemy);
   }
-  if(enemy.hits>=3) {
+  if(enemy.hits>=enemyMaxHealth(enemy)) {
     battleEnemies=battleEnemies.filter(e=>e!==enemy);
     battleKills++;
     if(source!=='patrick') patrickCharge=Math.min(2,patrickCharge+1);
+    if(character==='sandy') {
+      if(sandyUses<3 && ++sandyRechargeKills>=2) {sandyUses++;sandyRechargeKills=0;}
+      if(sandyUses===3) sandyRechargeKills=0;
+    }
     if(tutorialFirstKillPending) {tutorialFirstKillPending=false;tutorialKillPending=true;}
     if(battleKills>battleBest) {
       battleBest=battleKills;localStorage.setItem('bobSnakeBattleBest',battleBest);updateBestDisplay();
@@ -759,7 +788,7 @@ function collectFood() {
   const target=laserTarget();
   if (type === 'red' && target) {
     playEffect('laser');
-    beam={from:{...snake[0]},to:{...target},until:gameTime+400,defeated:target.hits+1>=3};
+    beam={from:{...snake[0]},to:{...target},until:gameTime+400,defeated:target.hits+1>=enemyMaxHealth(target)};
     if(gameMode==='battle') {
       damageBattleEnemy(target,1);finishBattleAttack();
     } else {
@@ -1084,7 +1113,7 @@ function startGame() {
   battleEnemies = [];
   battleWave = 0;
   battleKills = 0;
-  abilityReadyAt = 0;patrickCharge = 2;karateArmed = false;sandyImmuneUntil = 0;abilityAnimation = null;
+  abilityReadyAt = 0;patrickCharge = 2;karateArmed = false;sandyUses = 2;sandyRechargeKills = 0;sandyImmuneUntil = 0;abilityAnimation = null;
   tutorialFirstKillPending = gameMode==='battle' && localStorage.getItem('bobSnakeBattleTutorialSeen')!=='true';
   tutorialKillPending = false;
   if(gameMode!=='battle' && character==='sandy') character='bob';
@@ -2091,7 +2120,7 @@ function drawEnemy(enemy,now) {
   ctx.save();ctx.translate(x,y);
   if(gameMode==='battle') {
     ctx.fillStyle='rgba(4,30,49,.85)';ctx.fillRect(1,-6,18,4);
-    ctx.fillStyle='#92ed76';ctx.fillRect(2,-5,16*Math.max(0,3-enemy.hits)/3,2);
+    ctx.fillStyle='#92ed76';ctx.fillRect(2,-5,16*Math.max(0,enemyMaxHealth(enemy)-enemy.hits)/enemyMaxHealth(enemy),2);
   }
   ctx.fillStyle=enemy.frozenUntil>gameTime ? '#a8efff' : enemyColor(enemy);
   if(enemy.stunnedUntil>gameTime) {ctx.shadowColor='#66e6ff';ctx.shadowBlur=8;}

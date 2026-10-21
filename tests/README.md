@@ -40,3 +40,9 @@ sprites luminosos entre frames e uma única medição dos botões por gesto.
 A resposta visual imediata às curvas, continuidade entre passos e pausa/retomada
 sem saltos também são verificadas. A suíte cobre a pausa no canto superior
 direito, transparência dos poderes e preferência de música persistente.
+
+As regressões de entrada cobrem correção de comandos pendentes, repetição
+automática do teclado, direções neutras e troca de controle entre dois dedos.
+Os efeitos de coleta, laser e morte são renderizados com OfflineAudioContext
+para verificar áudio real e ausência de clipping, sem arquivos de terceiros.
+Também são testados os controles independentes de música, efeitos e silêncio geral.

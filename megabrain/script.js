@@ -213,7 +213,10 @@ function resizeBoardForViewport() {
   const active = isFullscreen();
   document.body.classList.toggle('game-fullscreen', active);
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
-  requestAnimationFrame(fitFullscreenBoard);
+  requestAnimationFrame(() => {
+    fitFullscreenBoard();
+    if (padPointer !== null) measurePadHitAreas();
+  });
 }
 
 // =====================================
@@ -496,6 +499,7 @@ function addScore(amount) {
 }
 
 function collectFood() {
+  playEffect('collect');
   const type = food.type || 'normal';
   if (plankton) bossNextFood = type === 'normal' ? 'red' : 'normal';
   if (foodTypes[type].duration &&
@@ -503,6 +507,7 @@ function collectFood() {
     powers[type] = gameTime + foodTypes[type].duration;
   }
   if (type === 'red' && plankton) {
+    playEffect('laser');
     beam = {from: {...snake[0]}, to: {...plankton}, until: gameTime + 400};
     plankton.hits++;
     beam.defeated = plankton.hits >= 3;
@@ -555,10 +560,17 @@ const musicas = {
 };
 
 let musicMuted = localStorage.getItem('bobSnakeMusicMuted') === 'true';
+let effectsMuted = localStorage.getItem('bobSnakeEffectsMuted') === 'true';
+let allMuted = localStorage.getItem('bobSnakeAllMuted') === 'true';
+let effectsContext = null;
+let effectsGain = null;
+const activeEffects = new Set();
 const muteMusicBtn = document.getElementById('muteMusicBtn');
+const muteEffectsBtn = document.getElementById('muteEffectsBtn');
+const muteAllBtn = document.getElementById('muteAllBtn');
 
 Object.values(musicas).forEach(musica => {
-  musica.muted = musicMuted;
+  musica.muted = musicMuted || allMuted;
   musica.loop = true;
   musica.volume = 0.35;
 });
@@ -580,7 +592,7 @@ function tocarMusica() {
     musicaAtual = musicaSelecionada;
     musicaAtual.currentTime = 0;
   }
-  musicaAtual.muted = musicMuted;
+  musicaAtual.muted = musicMuted || allMuted;
 
   musicaAtual.play().catch(erro => {
     console.log(
@@ -599,16 +611,80 @@ function pararMusica() {
   musicaAtual = null;
 }
 
+// Tons originais: coleta ascendente, laser descendente e queda grave na morte.
+const effectNotes = {
+  collect:[{type:'sine',from:620,to:930,time:.09,at:0},{type:'sine',from:960,to:1320,time:.1,at:.055}],
+  laser:[{type:'sawtooth',from:1450,to:130,time:.19,at:0}],
+  death:[{type:'triangle',from:360,to:65,time:.42,at:0},{type:'sine',from:140,to:45,time:.32,at:.1}]
+};
+
+function unlockEffects() {
+  try {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) return;
+    if (!effectsContext) {
+      effectsContext = new Audio();
+      effectsGain = effectsContext.createGain();
+      effectsGain.gain.value = effectsMuted || allMuted ? 0 : .32;
+      effectsGain.connect(effectsContext.destination);
+    }
+    if (effectsContext.state === 'suspended') effectsContext.resume().catch(()=>{});
+  } catch { /* Falta de áudio nunca bloqueia os controles ou a simulação. */ }
+}
+
+function stopEffects() {
+  for (const voice of activeEffects) {
+    try {voice.oscillator.stop();} catch { /* Pode já ter encerrado. */ }
+    voice.oscillator.disconnect();voice.gain.disconnect();
+  }
+  activeEffects.clear();
+}
+
+function playEffect(kind) {
+  if (effectsMuted || allMuted || effectsContext?.state !== 'running') return;
+  scheduleEffectNotes(effectsContext,effectsGain,kind);
+}
+
+function scheduleEffectNotes(context,output,kind) {
+  for (const note of effectNotes[kind] || []) {
+    if (activeEffects.size>=12) break;
+    const at=context.currentTime+note.at;
+    const oscillator=context.createOscillator(), gain=context.createGain();
+    oscillator.type=note.type;
+    oscillator.frequency.setValueAtTime(note.from,at);
+    oscillator.frequency.exponentialRampToValueAtTime(note.to,at+note.time);
+    gain.gain.setValueAtTime(.0001,at);
+    gain.gain.exponentialRampToValueAtTime(.35,at+.005);
+    gain.gain.exponentialRampToValueAtTime(.0001,at+note.time);
+    oscillator.connect(gain);gain.connect(output);
+    const voice={oscillator,gain};activeEffects.add(voice);
+    oscillator.onended=()=>{activeEffects.delete(voice);oscillator.disconnect();gain.disconnect();};
+    oscillator.start(at);oscillator.stop(at+note.time+.01);
+  }
+}
+
 function updateMuteButton() {
   muteMusicBtn.textContent = musicMuted ? '🔊 Ativar música' : '🔇 Silenciar música';
-  muteMusicBtn.setAttribute('aria-pressed', String(musicMuted));
+  muteMusicBtn.setAttribute('aria-pressed',String(musicMuted));
+  muteEffectsBtn.textContent = effectsMuted ? '🔊 Ativar sons' : '🔇 Silenciar sons';
+  muteEffectsBtn.setAttribute('aria-pressed',String(effectsMuted));
+  muteAllBtn.textContent = allMuted ? '🔊 Restaurar áudio' : '🔇 Silenciar tudo';
+  muteAllBtn.setAttribute('aria-pressed',String(allMuted));
 }
-muteMusicBtn.addEventListener('click', () => {
-  musicMuted = !musicMuted;
-  localStorage.setItem('bobSnakeMusicMuted', String(musicMuted));
-  Object.values(musicas).forEach(musica => {musica.muted = musicMuted;});
+
+function applyAudioPreferences() {
+  Object.values(musicas).forEach(musica=>{musica.muted=musicMuted || allMuted;});
+  if (effectsGain) effectsGain.gain.setValueAtTime(effectsMuted || allMuted ? 0 : .32,effectsContext.currentTime);
+  if (effectsMuted || allMuted) stopEffects();
+  localStorage.setItem('bobSnakeMusicMuted',String(musicMuted));
+  localStorage.setItem('bobSnakeEffectsMuted',String(effectsMuted));
+  localStorage.setItem('bobSnakeAllMuted',String(allMuted));
   updateMuteButton();
-});
+}
+
+muteMusicBtn.addEventListener('click',()=>{musicMuted=!musicMuted;applyAudioPreferences();});
+muteEffectsBtn.addEventListener('click',()=>{effectsMuted=!effectsMuted;applyAudioPreferences();});
+muteAllBtn.addEventListener('click',()=>{allMuted=!allMuted;applyAudioPreferences();});
 updateMuteButton();
 
 // =====================================
@@ -684,6 +760,8 @@ document.getElementById('menuBtn')
 // =====================================
 
 function startGame() {
+  stopEffects();
+  unlockEffects();
   clearInterval(timer);
   configureGrid();
 
@@ -926,7 +1004,6 @@ function tick() {
   refreshSpeed();
   direction = directionQueue.shift() || nextDirection;
   nextDirection = directionQueue[0] || direction;
-  if (padDirection) setDirection(padDirection);
   moveMagnet();
   const head = wrap({x: snake[0].x + direction.x, y: snake[0].y + direction.y});
   // O ímã pode entregar a comida na posição atual da cabeça.
@@ -985,16 +1062,33 @@ function setDirection(dir) {
 
   const d = dirs[dir];
 
-  // Guarda duas curvas rápidas em ordem, sem perder a segunda ou inverter o corpo.
-  const last = directionQueue[directionQueue.length-1] || direction;
-  if (!d || same(d,last) || (d.x === -last.x && d.y === -last.y) || directionQueue.length >= 2) return;
+  if (!d) return;
+  const first = directionQueue[0];
+  const opposite = (a,b) => a.x === -b.x && a.y === -b.y;
+  let queued;
+  if (!first) {
+    // Entradas neutras nunca alteram a animação nem o relógio de movimento.
+    if (same(d,direction) || opposite(d,direction)) return;
+    queued = [d];
+  } else if (same(d,first)) {
+    if (directionQueue.length===1) return;
+    queued = [first];
+  } else if (opposite(d,first)) {
+    // Corrige uma curva ainda não executada, mantendo a segurança do corpo.
+    if (same(d,direction) || opposite(d,direction)) return;
+    queued = [d];
+  } else {
+    if (directionQueue.length===2 && same(d,directionQueue[1])) return;
+    queued = [first,d]; // O comando lateral mais recente substitui o futuro obsoleto.
+  }
   const now = performance.now();
-  const from = directionQueue.length ? null : getVisualHead(movementProgress(now), now);
-  directionQueue.push(d);
+  const changed = !first || !same(first,queued[0]);
+  const from = changed ? getVisualHead(movementProgress(now),now) : null;
+  directionQueue = queued;
   nextDirection = directionQueue[0];
   if (from) {
     inputMotion = {
-      from, target:wrap({x:snake[0].x+d.x,y:snake[0].y+d.y}), tickAt:lastMoveAt,
+      from, target:wrap({x:snake[0].x+queued[0].x,y:snake[0].y+queued[0].y}), tickAt:lastMoveAt,
       startedAt:now, duration:Math.max(1,motionDuration-(now-lastMoveAt))
     };
   }
@@ -1025,7 +1119,7 @@ document.addEventListener('keydown', e => {
 
   if (map[e.key]) {
     e.preventDefault();
-    setDirection(map[e.key]);
+    if (!e.repeat) setDirection(map[e.key]);
   }
 
   if (
@@ -1052,6 +1146,10 @@ function clearPadPointer(event) {
   directionPad.querySelectorAll('.pressed').forEach(button => button.classList.remove('pressed'));
 }
 
+function measurePadHitAreas() {
+  padHitAreas = Array.from(directionPad.querySelectorAll('[data-dir]'),button => ({button,rect:button.getBoundingClientRect()}));
+}
+
 function steerFromPointer(event) {
   const hit = padHitAreas.find(({rect}) => event.clientX >= rect.left && event.clientX <= rect.right &&
     event.clientY >= rect.top && event.clientY <= rect.bottom);
@@ -1065,12 +1163,12 @@ function steerFromPointer(event) {
 }
 
 directionPad.addEventListener('pointerdown', event => {
-  if (padPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
   padPointer = event.pointerId;
-  padHitAreas = Array.from(directionPad.querySelectorAll('[data-dir]'),button => ({button,rect:button.getBoundingClientRect()}));
+  measurePadHitAreas();
   // A captura mantém o gesto mesmo no espaço central e fora dos botões.
-  directionPad.setPointerCapture(event.pointerId);
+  try {directionPad.setPointerCapture(event.pointerId);} catch { /* O fallback global encerra o gesto. */ }
   steerFromPointer(event);
 });
 function movePadPointer(event) {
@@ -1079,10 +1177,11 @@ function movePadPointer(event) {
   const samples = event.getCoalescedEvents?.();
   steerFromPointer(samples?.length ? samples[samples.length-1] : event);
 }
-// Usa uma única fonte de eventos, evitando processar o mesmo movimento duas vezes.
-directionPad.addEventListener('onpointerrawupdate' in window ? 'pointerrawupdate' : 'pointermove', movePadPointer);
-directionPad.addEventListener('pointerup', clearPadPointer);
-directionPad.addEventListener('pointercancel', clearPadPointer);
+// pointermove é sempre o fallback; o filtro de direção elimina amostras duplicadas.
+directionPad.addEventListener('pointermove', movePadPointer);
+if ('onpointerrawupdate' in window) directionPad.addEventListener('pointerrawupdate',movePadPointer);
+window.addEventListener('pointerup', clearPadPointer);
+window.addEventListener('pointercancel', clearPadPointer);
 directionPad.addEventListener('lostpointercapture', clearPadPointer);
 window.addEventListener('blur', () => clearPadPointer());
 
@@ -1098,6 +1197,7 @@ function togglePause() {
     pausedProgress = movementProgress(now);
     lastVisualPositions = visualSnakePositions(pausedProgress, now);
     pauseStartedAt = now;
+    stopEffects();
     clearTimeout(timer);
   } else {
     const elapsed = now-pauseStartedAt;
@@ -1140,6 +1240,8 @@ function togglePause() {
 // =====================================
 
 function endGame() {
+  if (over) return;
+  playEffect('death');
   over = true;
   clearPadPointer();
 
@@ -1171,6 +1273,7 @@ function endGame() {
 // =====================================
 
 function goMenu() {
+  stopEffects();
   clearPadPointer();
   cancelAnimationFrame(animationFrame);
   clearInterval(timer);

@@ -454,10 +454,10 @@ class GameTests(unittest.TestCase):
           assert(motionDuration===speed && currentSpeed===speed,'continuous movement without stop/go at turns');
           tick();assert(direction.x===-1 && snake[0].x===7,'second turn applied');
           setDirection('right');assert(directionQueue.length===0,'reverse rejected');
-          // A gesture arriving while the buffer is full is retried while held.
-          setDirection('up');setDirection('right');padDirection='down';
-          tick();tick();tick();padDirection=null;
-          assert(direction.y===1,'held gesture not lost at full buffer');
+          // A new valid command corrects the pending turn instead of being dropped.
+          setDirection('up');setDirection('right');setDirection('down');
+          tick();
+          assert(direction.y===1,'latest valid turn is not lost');
           paused=true;setDirection('left');assert(!directionQueue.length,'paused input ignored');
         ''')
 
@@ -591,6 +591,137 @@ class GameTests(unittest.TestCase):
           tocarMusica();
           assert(track.currentTime===23 && track.muted && !track.paused,'resume track at saved position');
         ''')
+
+    def test_latest_valid_lateral_command_replaces_stale_buffer(self):
+        self.check('''
+          setDirection('up');setDirection('left');setDirection('right');
+          assert(directionQueue.length===2 && directionQueue[1].x===1,'latest valid side turn accepted');
+          tick();tick();
+          assert(direction.x===1,'latest lateral movement executed');
+          setDirection('down');setDirection('up');
+          assert(directionQueue.length===1 && directionQueue[0].y===-1,'opposite pending turn can be corrected before commit');
+        ''')
+
+    def test_rejected_held_direction_does_not_reappear_after_turn(self):
+        self.check('''
+          padDirection='left';setDirection('left');setDirection('up');
+          tick();padDirection=null;
+          assert(direction.y===-1 && !directionQueue.length,'rejected reverse never becomes a phantom turn');
+        ''')
+
+    def test_keyboard_autorepeat_does_not_insert_unwanted_turn(self):
+        self.check('''
+          setDirection('up');
+          document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',repeat:true,bubbles:true}));
+          assert(directionQueue.length===1 && directionQueue[0].y===-1,'repeat ignored during queued turn');
+        ''')
+
+    def test_neutral_inputs_do_not_change_motion_or_clock(self):
+        self.check('''
+          const stamp=lastMoveAt,duration=motionDuration,clock=gameTime,scheduled=timer;
+          const from=getVisualHead(.4,lastMoveAt+duration*.4);
+          for(let i=0;i<30;i++){setDirection('right');setDirection('left');}
+          const to=getVisualHead(.4,lastMoveAt+duration*.4);
+          assert(same(from,to) && !inputMotion && !directionQueue.length,'neutral inputs leave animation untouched');
+          assert(lastMoveAt===stamp && motionDuration===duration && gameTime===clock && timer===scheduled,'no timer reset or extra movement');
+        ''')
+
+    def test_second_finger_can_take_control_of_lateral_movement(self):
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.evaluate("snake=[{x:8,y:10},{x:8,y:11},{x:8,y:12},{x:8,y:13}];direction=nextDirection={x:0,y:-1};game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        client=self.page.context.new_cdp_session(self.page)
+        client.send('Emulation.setTouchEmulationEnabled',{'enabled':True,'maxTouchPoints':2})
+        def point(direction, identifier):
+            box=self.page.locator(f'[data-dir={direction}]').bounding_box()
+            return {'x':box['x']+box['width']/2,'y':box['y']+box['height']/2,'id':identifier}
+        up=point('up',1)
+        client.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[up]})
+        first=self.page.evaluate('padPointer')
+        left=point('left',2)
+        client.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[up,left]})
+        self.page.wait_for_function("padDirection==='left' && nextDirection.x===-1")
+        self.assertNotEqual(self.page.evaluate('padPointer'),first)
+        client.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[up]})
+        self.assertEqual(self.page.evaluate('padDirection'),'left')
+        self.check('tick();assert(direction.x===-1 && !over,"second touch steers left safely");')
+        # Fallback works even if a browser advertises raw events without delivering them.
+        self.page.evaluate('''() => {
+          const r=document.querySelector('[data-dir=down]').getBoundingClientRect();
+          directionPad.dispatchEvent(new PointerEvent('pointermove',{
+            pointerId:padPointer,pointerType:'touch',bubbles:true,clientX:r.x+r.width/2,clientY:r.y+r.height/2
+          }));
+        }''')
+        self.assertEqual(self.page.evaluate('nextDirection.y'),1)
+        client.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+        self.assertTrue(self.page.evaluate('padPointer===null'))
+        client.detach()
+
+    def test_effects_are_real_synthesized_waveforms_without_clipping(self):
+        result=self.page.evaluate('''async () => {
+          const results={};
+          for(const kind of ['collect','laser','death']) {
+            const context=new OfflineAudioContext(1,30870,44100);
+            const output=context.createGain();output.gain.value=.32;output.connect(context.destination);
+            scheduleEffectNotes(context,output,kind);
+            const buffer=await context.startRendering(), samples=buffer.getChannelData(0);
+            let peak=0,energy=0,tail=0;
+            for(let i=0;i<samples.length;i++) {
+              peak=Math.max(peak,Math.abs(samples[i]));energy+=samples[i]*samples[i];
+              if(i>26460)tail+=samples[i]*samples[i];
+            }
+            results[kind]={peak,energy,tail};
+          }
+          return results;
+        }''')
+        for kind,stats in result.items():
+            self.assertGreater(stats['energy'],.01,kind)
+            self.assertGreater(stats['peak'],.01,kind)
+            self.assertLess(stats['peak'],.5,kind)
+            self.assertLess(stats['tail'],.0001,kind)
+        self.assertNotAlmostEqual(result['collect']['energy'],result['death']['energy'],delta=.01)
+
+    def test_game_events_trigger_collection_laser_and_death_once(self):
+        self.check('''
+          const events=[],original=playEffect;playEffect=kind=>events.push(kind);
+          try {
+            food={...snake[0],type:'normal'};collectFood();clearTimeout(timer);
+            plankton={x:20,y:15,hits:0,stunnedUntil:0};
+            food={...snake[0],type:'red'};collectFood();clearTimeout(timer);
+            endGame();endGame();
+            assert(events.join(',')==='collect,collect,laser,death','effects attached to the correct events');
+          } finally {playEffect=original;}
+        ''')
+
+    def test_music_effects_and_master_mutes_are_independent_and_persistent(self):
+        self.page.locator('#pauseBtn').click()
+        self.page.locator('#muteEffectsBtn').click()
+        self.check('''
+          assert(effectsMuted && !musicMuted && !allMuted,'only effects muted');
+          assert(Object.values(musicas).every(m=>!m.muted),'music unchanged');
+          playEffect('laser');assert(!activeEffects.size,'muted effects do not allocate voices');
+        ''')
+        self.page.locator('#muteAllBtn').click()
+        self.check('''
+          assert(allMuted && Object.values(musicas).every(m=>m.muted),'master silences music');
+          playEffect('death');assert(!activeEffects.size,'master silences effects');
+        ''')
+        self.page.reload(wait_until='domcontentloaded')
+        self.page.locator('#startBtn').click()
+        self.page.evaluate('clearTimeout(timer)')
+        self.page.locator('#pauseBtn').click()
+        self.assertEqual(self.page.locator('#muteAllBtn').get_attribute('aria-pressed'),'true')
+        self.assertEqual(self.page.locator('#muteEffectsBtn').get_attribute('aria-pressed'),'true')
+        self.page.locator('#muteAllBtn').click()
+        self.assertTrue(self.page.evaluate('!allMuted && effectsMuted && Object.values(musicas).every(m=>!m.muted)'))
+        self.page.locator('#muteMusicBtn').click()
+        self.page.locator('#muteEffectsBtn').click()
+        self.assertTrue(self.page.evaluate('musicMuted && !effectsMuted && Object.values(musicas).every(m=>m.muted)'))
+        self.page.wait_for_function("effectsContext.state==='running'")
+        self.check('''
+          playEffect('collect');assert(activeEffects.size===2,'effects play with music muted');
+        ''')
+        self.page.locator('#muteEffectsBtn').click()
+        self.assertEqual(self.page.evaluate('activeEffects.size'),0)
 
     def test_native_fullscreen_and_exit_to_menu(self):
         self.page.locator('#fullscreenBtn').click()

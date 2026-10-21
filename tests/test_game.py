@@ -318,6 +318,67 @@ class GameTests(unittest.TestCase):
         self.page.wait_for_timeout(110)
         self.assertTrue(self.page.evaluate('renderSamples.filter(a=>a>0 && a<1).length>=2'))
 
+    def test_special_food_hint_explains_every_power(self):
+        self.check('''
+          for(const type of ['ghost','drill','super','magnet','red']) {
+            food={x:20,y:15,type};updateStatus();
+            assert(foodHint.textContent.includes(foodDescriptions[type]),'food explanation '+type);
+            assert(foodHint.textContent.includes('NO MAPA'),'hint context');
+          }
+        ''')
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        hint=self.page.locator('#foodHint').bounding_box()
+        board=self.page.locator('#board').bounding_box()
+        self.assertLess(hint['y']+hint['height'],board['y'])
+        self.assertEqual(self.page.locator('#foodHint').evaluate('(el)=>getComputedStyle(el).pointerEvents'),'none')
+
+    def test_plankton_health_bar_loses_life_without_visible_numbers(self):
+        self.check('''
+          score=190;obstaclePhase=6;scenePhase=1;addScore(10);clearInterval(timer);updateStatus();
+          assert(!bossHealth.hidden && bossHealth.value===3,'full life');
+          for(let hit=1;hit<=3;hit++) {
+            food={...snake[0],type:'red'};collectFood();clearInterval(timer);updateStatus();
+            assert(bossHealth.value===3-hit && !bossHealth.hidden,'life after ray '+hit);
+            assert(!bossStatus.textContent.includes('/3'),'no visible hit count');
+            assert(bossHealth.textContent==='', 'no numerical health label');
+          }
+          assert(bossStatus.textContent.includes('DERROTADO'),'defeat feedback');
+          gameTime=beam.until+1;updateStatus();assert(bossHealth.hidden,'hide after defeat');
+        ''')
+
+    def test_laser_is_drawn_from_both_animated_eyes(self):
+        self.check('''
+          previousSnake=[{x:7,y:10}];snake=[{x:8,y:10}];
+          beam={to:{x:20,y:10},until:1000};gameTime=0;
+          const original=ctx.moveTo;
+          try {
+            for(const person of ['bob','patrick']) {
+              character=person;
+              const eyes=getEyeOrigins(.5), starts=[];
+              ctx.moveTo=function(x,y){starts.push({x,y});original.call(ctx,x,y);};
+              drawEyeLaser(.5);
+              assert(starts.length===2 && starts.every((p,i)=>same(p,eyes[i])),'two eye beams');
+              assert(eyes[0].x===150+(person==='bob'?7.5:8),'animated head origin');
+              assert(eyes[0].y===200+(person==='bob'?7:9),'character eye height');
+            }
+            const starts=[];ctx.moveTo=(x,y)=>starts.push({x,y});
+            gameTime=1001;drawEyeLaser();assert(!starts.length,'ray expires');
+          } finally {ctx.moveTo=original;}
+        ''')
+
+    def test_mobile_map_larger_and_controls_above_bottom_notice(self):
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        board=self.page.locator('#board').bounding_box()
+        pad=self.page.locator('.touch-controls').bounding_box()
+        self.assertGreater(board['width'],370)  # Antes: 352px neste viewport.
+        self.assertAlmostEqual(board['width']/board['height'],30/21,delta=.005)
+        self.assertGreaterEqual(844-(pad['y']+pad['height']),55)
+        self.assertLess(board['y']+board['height'],pad['y'])
+
     def test_native_fullscreen_and_exit_to_menu(self):
         self.page.locator('#fullscreenBtn').click()
         self.page.wait_for_function('document.fullscreenElement === game')

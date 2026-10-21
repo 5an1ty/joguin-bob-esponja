@@ -340,6 +340,16 @@ let planktonMotion = null;
 let animationFrame = null;
 const powerStatus = document.getElementById('powerStatus');
 const bossStatus = document.getElementById('bossStatus');
+const bossHealth = document.getElementById('bossHealth');
+const foodHint = document.getElementById('foodHint');
+const foodDescriptions = {
+  normal: 'Normal · +10 pontos',
+  ghost: 'Roxo · Atravessa o próprio corpo por 8s',
+  drill: 'Azul · Atravessa pedras e casas por 8s',
+  super: 'Amarelo · Imunidade a tudo + supervelocidade por 6s',
+  magnet: 'Rosa · Atrai hambúrgueres através dos obstáculos por 10s',
+  red: 'Vermelho · Raio pelos olhos: tira vida e paralisa Plankton por 3s'
+};
 
 function hasPower(type) { return (powers[type] || 0) > gameTime; }
 
@@ -354,6 +364,10 @@ function refreshSpeed() {
 }
 
 function updateStatus() {
+  const type = food?.type || 'normal';
+  const hint = food ? `NO MAPA · ${foodDescriptions[type]}` : 'Sem hambúrguer disponível';
+  if (foodHint.textContent !== hint) foodHint.textContent = hint;
+  foodHint.style.setProperty('--food-color', foodTypes[type].color);
   const active = Object.keys(powers).filter(hasPower);
   const key = active.join(',');
   // Mantém os cartões no DOM durante a contagem, sem recriá-los a cada passo.
@@ -384,9 +398,12 @@ function updateStatus() {
     if (remaining.textContent !== label) remaining.textContent = label;
     badge.querySelector('progress').value = powers[type]-gameTime;
   }
+  const defeated = beam?.defeated && beam.until > gameTime;
+  bossHealth.hidden = !plankton && !defeated;
+  bossHealth.value = plankton ? Math.max(0, 3-plankton.hits) : 0;
   const bossLabel = plankton
-    ? `👁 Plankton ${plankton.hits}/3 raios${plankton.stunnedUntil > gameTime ? ' · PARALISADO' : ' · PERSEGUINDO!'} · Próximo: ${bossNextFood === 'red' ? 'VERMELHO ϟ' : 'NORMAL 🍔'}`
-    : 'Bordas livres ↔ ↕';
+    ? `👁 Plankton · ${plankton.stunnedUntil > gameTime ? 'PARALISADO' : 'PERSEGUINDO!'}`
+    : defeated ? 'PLANKTON DERROTADO · +50 PONTOS' : 'Bordas livres ↔ ↕';
   if (bossStatus.textContent !== bossLabel) bossStatus.textContent = bossLabel;
 }
 
@@ -439,6 +456,7 @@ function collectFood() {
   if (type === 'red' && plankton) {
     beam = {from: {...snake[0]}, to: {...plankton}, until: gameTime + 400};
     plankton.hits++;
+    beam.defeated = plankton.hits >= 3;
     plankton.stunnedUntil = gameTime + 3000;
     if (plankton.hits >= 3) {
       plankton = null;
@@ -1086,7 +1104,9 @@ function fitFullscreenBoard() {
   const header = document.querySelector('.game-head').getBoundingClientRect();
   const sidePad = pad.width > 0 && bounds.width > bounds.height && bounds.height <= 500;
   const top = Math.max(header.bottom-bounds.top+12, sidePad ? 72 : status.bottom-bounds.top+12);
-  const availableWidth = bounds.width - (sidePad ? pad.width+52 : 28);
+  const portable = matchMedia('(max-width:900px), (pointer:coarse)').matches;
+  const margin = portable ? 4 : 14;
+  const availableWidth = bounds.width - (sidePad ? pad.width+36 : margin*2);
   const bottom = pad.height && !sidePad ? pad.top-bounds.top-18 : bounds.height-18;
   const availableHeight = Math.max(80,bottom-top);
   const frame = document.querySelector('.board-wrap');
@@ -1097,7 +1117,7 @@ function fitFullscreenBoard() {
   const height = (width-borderX)*ROWS/COLS+borderY;
   game.style.setProperty('--map-width',`${width}px`);
   game.style.setProperty('--map-height',`${height}px`);
-  game.style.setProperty('--map-left',`${14+(availableWidth-width)/2}px`);
+  game.style.setProperty('--map-left',`${margin+(availableWidth-width)/2}px`);
   game.style.setProperty('--map-top',`${top+(availableHeight-height)/2}px`);
   syncCanvasResolution();
 }
@@ -1239,6 +1259,7 @@ function draw(alpha = 1, now = performance.now()) {
   positions.forEach((cell,i) => paintWrapped(cell, (x,y) => {
     ctx.save(); applyCharacterEffect(); drawSnake(x,y,i); ctx.restore();
   }));
+  drawEyeLaser(alpha);
 }
 
 // =====================================
@@ -1355,11 +1376,30 @@ function drawHouse(x,y,kind) {
   ctx.restore();
 }
 
-function drawPlankton(now = performance.now()) {
-  if(beam && beam.until>gameTime) {
-    ctx.save();ctx.strokeStyle='#ff4560';ctx.lineWidth=4;ctx.shadowColor='#fff';ctx.shadowBlur=10;
-    ctx.beginPath();ctx.moveTo(beam.from.x*CELL+10,beam.from.y*CELL+10);ctx.lineTo(beam.to.x*CELL+10,beam.to.y*CELL+10);ctx.stroke();ctx.restore();
+function getEyeOrigins(alpha = 1) {
+  if (!snake.length) return [];
+  const head = interpolateCell(previousSnake[0] || snake[0],snake[0],alpha);
+  const eyes = character === 'bob' ? [{x:7.5,y:7},{x:13.5,y:7}] : [{x:8,y:9},{x:12,y:9}];
+  return eyes.map(eye => ({
+    x:(head.x*CELL+eye.x)%BOARD_WIDTH,
+    y:(head.y*CELL+eye.y)%BOARD_HEIGHT
+  }));
+}
+
+function drawEyeLaser(alpha = 1) {
+  if (!beam || beam.until <= gameTime) return;
+  const target = {x:beam.to.x*CELL+10,y:beam.to.y*CELL+10};
+  ctx.save();ctx.lineCap='round';ctx.shadowColor='#ff334e';ctx.shadowBlur=8;
+  for (const eye of getEyeOrigins(alpha)) {
+    ctx.strokeStyle='#ff334e';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(eye.x,eye.y);ctx.lineTo(target.x,target.y);ctx.stroke();
+    ctx.strokeStyle='#fff4e9';ctx.lineWidth=.7;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(eye.x,eye.y,1.5,0,Math.PI*2);ctx.fill();
   }
+  ctx.restore();
+}
+
+function drawPlankton(now = performance.now()) {
   if(!plankton) return;
   const motion = planktonMotion;
   const alpha = !paused && !over && motion ? Math.min(1,(now-motion.startedAt)/motion.duration) : 1;

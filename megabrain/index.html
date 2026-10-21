@@ -53,7 +53,7 @@
           <p><strong>👁 Plankton malvado:</strong> aparece a cada 200 pontos e persegue você, atravessando obstáculos. Alterne hambúrgueres normais com <strong>3 hambúrgueres de Siri vermelhos</strong> para derrotá-lo. Cada raio paralisa o inimigo por <strong>3 segundos</strong>; a vitória dá <strong>+50 pontos</strong>. Enquanto ele estiver paralisado, encostar nele é seguro.</p>
           <p>Os poderes podem ser combinados: cada efeito ativo aparece em um cartão com nome, tempo restante e barra de duração. O personagem fica translúcido ao atravessar obstáculos (azul) e ganha um brilho roxo para atravessar o corpo. Hambúrgueres especiais são mais raros no Médio (22%) e no Difícil (10%), contra 60% no Fácil. Plankton persegue mais rápido no Médio e ainda mais no Difícil. Ao terminarem, as colisões voltam ao normal. A pausa congela poderes e inimigos. A cada 30 pontos os obstáculos mudam de lugar e de cor; a cada 100, o cenário muda e a velocidade aumenta um pouco.</p>
           <p><strong>Casas também são obstáculos:</strong> abacaxi do Bob, moai do Lula Molusco e pedra do Patrick. Sem o poder adequado, evite casas, pedras, seu corpo e o Plankton ativo.</p>
-          <p><strong>Tela cheia no celular:</strong> mantenha a orientação que preferir. O mapa mantém sua proporção, sem esticar a imagem. O modo portátil vertical traz um direcional maior, centralizado abaixo do mapa: mantenha o dedo encostado e deslize entre as setas para mudar de direção, sem precisar apertá-las novamente.</p>
+          <p><strong>Tela cheia no celular:</strong> mantenha a orientação que preferir. O mapa mantém sua proporção, sem esticar a imagem. A faixa acima do mapa explica o hambúrguer disponível, sem cobrir o jogo. A vida do Plankton aparece em uma barra sem números e os raios vermelhos saem dos olhos do personagem. O modo portátil vertical traz um direcional maior, centralizado abaixo do mapa: mantenha o dedo encostado e deslize entre as setas para mudar de direção, sem precisar apertá-las novamente.</p>
         </div>
       </div>
     </section>
@@ -65,7 +65,11 @@
         <div class="stat"><small>DIFICULDADE</small><strong id="level">Fácil</strong></div>
         <button id="pauseBtn" class="small-button" aria-label="Pausar jogo">II</button>
       </div>
-      <div class="status-bar"><span id="powerStatus" role="status"></span><span id="bossStatus" role="status"></span></div>
+      <div class="status-bar">
+        <span id="foodHint" class="food-hint" role="status"></span>
+        <span id="powerStatus" role="status"></span>
+        <span class="boss-panel"><span id="bossStatus" role="status"></span><progress id="bossHealth" max="3" value="3" aria-label="Vida do Plankton" hidden></progress></span>
+      </div>
       <div class="board-wrap">
         <canvas id="board" width="600" height="420" aria-label="Tabuleiro do jogo Snake"></canvas>
         <div id="overlay" class="overlay hidden"><div class="overlay-card"><div id="overlayIcon" class="overlay-icon">⏸️</div><h2 id="overlayTitle">Jogo pausado</h2><p id="overlayText">Respire fundo, mergulhador!</p><button id="resumeBtn" class="primary">CONTINUAR</button><button id="restartBtn" class="secondary">RECOMEÇAR</button><button id="menuBtn" class="text-button">Voltar ao menu</button></div></div>

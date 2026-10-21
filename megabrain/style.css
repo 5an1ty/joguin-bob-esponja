@@ -135,3 +135,27 @@ footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18
 .touch-controls [data-dir=left]::before{transform:rotate(-90deg)}
 .touch-controls [data-dir=right]::before{transform:rotate(90deg)}
 .touch-controls [data-dir=down]::before{transform:rotate(180deg)}
+
+/* A dica do hambúrguer e a vida do inimigo ficam fora da área jogável. */
+.food-hint{display:block;width:100%;padding:5px 8px;border-left:4px solid var(--food-color,#f5a62a);border-radius:6px;background:#062a42;color:#fff;font-size:11px;font-weight:900;line-height:1.35;text-shadow:none;pointer-events:none}
+.boss-panel{display:grid;justify-items:center;gap:3px;width:100%}
+#bossHealth{display:block;appearance:none;width:min(220px,100%);height:8px;border:1px solid #c4fb8b;border-radius:8px;overflow:hidden;background:#183621;box-shadow:0 0 5px #9be05a40}
+#bossHealth[hidden]{display:none}
+#bossHealth::-webkit-progress-bar{background:#183621}
+#bossHealth::-webkit-progress-value{background:linear-gradient(90deg,#65a923,#c9ff77);transition:width .18s ease-out}
+#bossHealth::-moz-progress-bar{background:linear-gradient(90deg,#65a923,#c9ff77)}
+#game.game-panel:is(:fullscreen,.fallback-fullscreen) .food-hint{max-width:1000px;justify-self:center}
+@media(max-width:900px),(pointer:coarse){
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen){--pad-size:clamp(54px,8dvh,68px)}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .touch-controls{bottom:calc(56px + env(safe-area-inset-bottom)) !important}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .board-wrap{border-width:3px !important}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .status-bar{left:8px;right:8px;gap:4px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) #powerStatus:not(:has(.effect-badge)){font-size:9px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .effect-badge{padding:3px 5px 6px;gap:1px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .effect-badge strong{font-size:10px}
+}
+@media(max-height:500px) and (orientation:landscape){
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .touch-controls{bottom:calc(36px + env(safe-area-inset-bottom)) !important;--pad-size:54px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .status-bar{left:auto;right:6px;width:170px;gap:3px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .food-hint{font-size:10px;padding:3px 5px}
+}

@@ -22,5 +22,7 @@ layout do direcional em quatro tamanhos e entrada/saída da tela cheia.
 Também validam o arrasto contínuo com eventos de toque do Chromium, proporção e
 resolução em telas com densidade 2×, interpolação entre frames, efeitos visuais,
 frequência de poderes por dificuldade e alternância normal/vermelho no Plankton.
+As regressões do HUD verificam a explicação do hambúrguer fora do mapa, a barra de
+vida sem números, os raios partindo dos dois olhos e a folga abaixo do direcional.
 A orientação e o comportamento da tela cheia em aparelhos reais devem ser
 conferidos também no navegador do dispositivo.

@@ -369,7 +369,7 @@ class GameTests(unittest.TestCase):
               ctx.moveTo=function(x,y){starts.push({x,y});original.call(ctx,x,y);};
               drawEyeLaser(.5);
               assert(starts.length===2 && starts.every((p,i)=>same(p,eyes[i])),'two eye beams');
-              assert(eyes[0].x===150+(person==='bob'?7.5:8),'animated head origin');
+              assert(eyes[0].x===170+(person==='bob'?7.5:8),'animated head origin');
               assert(eyes[0].y===200+(person==='bob'?7:9),'character eye height');
             }
             const starts=[];ctx.moveTo=(x,y)=>starts.push({x,y});
@@ -501,6 +501,95 @@ class GameTests(unittest.TestCase):
           assert(renderStats.sceneBuilds===scene+1,'scene changes invalidate cache');
           powers={drill:8000};draw(.5);
           assert(renderStats.spriteBuilds>sprites,'power visuals invalidate sprites');
+        ''')
+
+    def test_touch_turn_retargets_visible_head_before_next_tick(self):
+        self.check('''
+          directionQueue=[];direction=nextDirection={x:1,y:0};inputMotion=null;
+          snake=[{x:8,y:10},{x:7,y:10}];lastVisualPositions=[];
+          motionDuration=currentSpeed;lastMoveAt=performance.now()-currentSpeed*.4;
+          const time=gameTime;
+          setDirection('up');
+          const motion=inputMotion;
+          assert(motion && directionQueue.length===1,'turn is immediately visible');
+          const start=getVisualHead(0,motion.startedAt);
+          assert(Math.abs(start.x-motion.from.x)<.0001 && Math.abs(start.y-motion.from.y)<.0001,'no jump at touch');
+          const mid=getVisualHead(.5,motion.startedAt+motion.duration/2);
+          assert(mid.y<10 && mid.y>9,'turn starts before logical movement');
+          assert(snake[0].x===8 && snake[0].y===10 && gameTime===time,'same game speed');
+          const end=getVisualHead(1,motion.startedAt+motion.duration);
+          assert(Math.abs(end.x-8)<.0001 && Math.abs(end.y-9)<.0001,'continuous turn endpoint');
+        ''')
+
+    def test_animation_does_not_lag_one_cell_behind(self):
+        self.check('''
+          directionQueue=[];direction=nextDirection={x:1,y:0};inputMotion=null;
+          snake=[{x:8,y:10},{x:7,y:10}];lastVisualPositions=[];
+          const midway=visualSnakePositions(.5,performance.now());
+          assert(midway[0].x===8.5 && midway[1].x===7.5,'draws current step');
+          const end=getVisualHead(1);tick();
+          const start=getVisualHead(0);
+          assert(same(start,end),'no jump between simulation steps');
+        ''')
+
+    def test_pause_freezes_animation_and_resumes_same_curve(self):
+        self.check('''
+          lastMoveAt=performance.now()-currentSpeed*.3;
+          setDirection('up');togglePause();
+          window.frozenSnake=visualSnakePositions(.5,performance.now()).map(p=>({...p}));
+          window.frozenTime=gameTime;
+          assert(directionQueue.length===1,'queued curve preserved');
+        ''')
+        self.page.wait_for_timeout(130)
+        self.check('''
+          const still=visualSnakePositions(1,performance.now());
+          assert(gameTime===window.frozenTime && still.every((p,i)=>same(p,window.frozenSnake[i])),'pause freezes visuals and timer');
+          togglePause();clearTimeout(timer);
+          const resumed=getVisualHead(movementProgress());
+          assert(Math.abs(resumed.x-window.frozenSnake[0].x)<.04 && Math.abs(resumed.y-window.frozenSnake[0].y)<.04,'resume without snapping');
+        ''')
+
+    def test_pause_at_top_right_and_transparent_power_indicators(self):
+        for width,height in [(1366,768),(390,844),(360,640),(844,390)]:
+            self.page.set_viewport_size({'width':width,'height':height})
+            self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport();powers={ghost:8000};updateStatus()")
+            self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+            pause=self.page.locator('#pauseBtn').bounding_box()
+            leave=self.page.locator('#fullscreenBtn').bounding_box()
+            self.assertGreater(pause['x'],width-65)
+            self.assertLessEqual(pause['y'],25)
+            self.assertLess(leave['x']+leave['width'],pause['x'])
+            opacity=float(self.page.locator('#powerStatus').evaluate('(el)=>getComputedStyle(el).opacity'))
+            self.assertGreaterEqual(opacity,.75)
+            self.assertLessEqual(opacity,.85)
+            self.page.evaluate('leaveFullscreen()')
+
+    def test_mute_from_pause_persists_after_reload(self):
+        self.page.locator('#pauseBtn').click()
+        mute=self.page.locator('#muteMusicBtn')
+        self.assertTrue(mute.is_visible())
+        mute.click()
+        self.assertEqual(mute.get_attribute('aria-pressed'),'true')
+        self.assertTrue(self.page.evaluate('Object.values(musicas).every(m=>m.muted)'))
+        self.page.locator('#resumeBtn').click()
+        self.page.evaluate('clearTimeout(timer)')
+        self.assertTrue(self.page.evaluate('musicaAtual.muted'))
+        self.page.reload(wait_until='domcontentloaded')
+        self.page.locator('#startBtn').click()
+        self.page.evaluate('clearTimeout(timer)')
+        self.page.locator('#pauseBtn').click()
+        self.assertEqual(mute.get_attribute('aria-pressed'),'true')
+        mute.click()
+        self.assertTrue(self.page.evaluate('Object.values(musicas).every(m=>!m.muted) && paused'))
+        self.assertEqual(mute.get_attribute('aria-pressed'),'false')
+
+    def test_audio_resume_does_not_restart_track(self):
+        self.check('''
+          const track={paused:true,currentTime:23,muted:false,
+            play(){this.paused=false;return Promise.resolve();},pause(){this.paused=true;}};
+          musicas[difficulty]=track;musicaAtual=track;musicMuted=true;
+          tocarMusica();
+          assert(track.currentTime===23 && track.muted && !track.paused,'resume track at saved position');
         ''')
 
     def test_native_fullscreen_and_exit_to_menu(self):

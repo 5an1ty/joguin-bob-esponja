@@ -362,6 +362,10 @@ let lastMoveAt = 0;
 let motionDuration = 175;
 let planktonMotion = null;
 let animationFrame = null;
+let inputMotion = null;
+let lastVisualPositions = [];
+let pauseStartedAt = 0;
+let pausedProgress = 0;
 const powerStatus = document.getElementById('powerStatus');
 const bossStatus = document.getElementById('bossStatus');
 const bossHealth = document.getElementById('bossHealth');
@@ -377,13 +381,23 @@ const foodDescriptions = {
 
 function hasPower(type) { return (powers[type] || 0) > gameTime; }
 
+// Um único timer; a pausa também suspende as atualizações da simulação.
+function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMoveAt))) {
+  clearTimeout(timer);
+  if (paused || over || !menu.classList.contains('hidden')) return;
+  timer = setTimeout(() => {
+    tick();
+    scheduleTick();
+  }, Math.max(1, delay));
+}
+
 function refreshSpeed() {
   const base = Math.max(40, settings[difficulty].speed * Math.pow(0.95, scenePhase));
   const speed = hasPower('super') ? Math.max(25, base * 0.55) : base;
   if (speed !== currentSpeed) {
     currentSpeed = speed;
     clearInterval(timer);
-    if (!over) timer = setInterval(tick, currentSpeed);
+    if (!over && !paused) scheduleTick();
   }
 }
 
@@ -540,7 +554,11 @@ const musicas = {
   hard: new Audio('musicas/medio-dificil.mp3')
 };
 
+let musicMuted = localStorage.getItem('bobSnakeMusicMuted') === 'true';
+const muteMusicBtn = document.getElementById('muteMusicBtn');
+
 Object.values(musicas).forEach(musica => {
+  musica.muted = musicMuted;
   musica.loop = true;
   musica.volume = 0.35;
 });
@@ -557,10 +575,12 @@ function tocarMusica() {
     return;
   }
 
-  pararMusica();
-
-  musicaAtual = musicaSelecionada;
-  musicaAtual.currentTime = 0;
+  if (musicaAtual !== musicaSelecionada) {
+    pararMusica();
+    musicaAtual = musicaSelecionada;
+    musicaAtual.currentTime = 0;
+  }
+  musicaAtual.muted = musicMuted;
 
   musicaAtual.play().catch(erro => {
     console.log(
@@ -578,6 +598,18 @@ function pararMusica() {
 
   musicaAtual = null;
 }
+
+function updateMuteButton() {
+  muteMusicBtn.textContent = musicMuted ? '🔊 Ativar música' : '🔇 Silenciar música';
+  muteMusicBtn.setAttribute('aria-pressed', String(musicMuted));
+}
+muteMusicBtn.addEventListener('click', () => {
+  musicMuted = !musicMuted;
+  localStorage.setItem('bobSnakeMusicMuted', String(musicMuted));
+  Object.values(musicas).forEach(musica => {musica.muted = musicMuted;});
+  updateMuteButton();
+});
+updateMuteButton();
 
 // =====================================
 // RECORDE
@@ -661,6 +693,9 @@ function startGame() {
   score = 0;
   gameTime = 0;
   powers = {};
+  lastVisualPositions = [];
+  inputMotion = null;
+  pausedProgress = 0;
   directionQueue = [];
   clearPadPointer();
   plankton = null;
@@ -717,16 +752,14 @@ function startGame() {
   previousSnake = snake.map(p => ({...p}));
   previousFood = food && {...food};
   lastMoveAt = performance.now();
+  inputMotion = null;
   motionDuration = currentSpeed;
   updateStatus();
   resizeBoardForViewport();
   startAnimation();
   tocarMusica();
 
-  timer = setInterval(
-    tick,
-    currentSpeed
-  );
+  scheduleTick();
 }
 
 // =====================================
@@ -887,6 +920,7 @@ function tick() {
   previousSnake = snake.map(p => ({...p}));
   previousFood = food && {...food};
   lastMoveAt = performance.now();
+  inputMotion = null;
   motionDuration = currentSpeed;
   gameTime += currentSpeed;
   refreshSpeed();
@@ -910,6 +944,7 @@ function tick() {
   } else snake.pop();
   spawnPlankton();
   updatePlankton();
+  motionDuration = currentSpeed;
   updateStatus();
 }
 
@@ -953,8 +988,16 @@ function setDirection(dir) {
   // Guarda duas curvas rápidas em ordem, sem perder a segunda ou inverter o corpo.
   const last = directionQueue[directionQueue.length-1] || direction;
   if (!d || same(d,last) || (d.x === -last.x && d.y === -last.y) || directionQueue.length >= 2) return;
+  const now = performance.now();
+  const from = directionQueue.length ? null : getVisualHead(movementProgress(now), now);
   directionQueue.push(d);
   nextDirection = directionQueue[0];
+  if (from) {
+    inputMotion = {
+      from, target:wrap({x:snake[0].x+d.x,y:snake[0].y+d.y}), tickAt:lastMoveAt,
+      startedAt:now, duration:Math.max(1,motionDuration-(now-lastMoveAt))
+    };
+  }
 }
 
 // =====================================
@@ -1050,10 +1093,22 @@ window.addEventListener('blur', () => clearPadPointer());
 function togglePause() {
   if (over) return;
 
+  const now = performance.now();
+  if (!paused) {
+    pausedProgress = movementProgress(now);
+    lastVisualPositions = visualSnakePositions(pausedProgress, now);
+    pauseStartedAt = now;
+    clearTimeout(timer);
+  } else {
+    const elapsed = now-pauseStartedAt;
+    lastMoveAt += elapsed;
+    if (inputMotion) {inputMotion.startedAt += elapsed;inputMotion.tickAt = lastMoveAt;}
+    if (planktonMotion) planktonMotion.startedAt += elapsed;
+  }
   clearPadPointer();
-  directionQueue = [];
-  nextDirection = direction;
   paused = !paused;
+  if (!paused) scheduleTick((1-pausedProgress)*currentSpeed);
+  document.getElementById('pauseBtn').setAttribute('aria-label',paused ? 'Retomar jogo' : 'Pausar jogo');
 
   overlay.classList.toggle('hidden', !paused);
 
@@ -1190,6 +1245,28 @@ function applyCharacterEffect() {
   if(hasPower('super')) {ctx.shadowColor = '#ffe45c';ctx.shadowBlur = 12;}
 }
 
+function movementProgress(now = performance.now()) {
+  return Math.min(1,Math.max(0,(now-lastMoveAt)/motionDuration));
+}
+
+// Desenha o passo em andamento, em vez de ficar uma célula atrás da simulação.
+function getVisualHead(alpha = movementProgress(), now = performance.now()) {
+  if (!snake.length) return null;
+  if ((paused || over) && lastVisualPositions.length) return lastVisualPositions[0];
+  const next = directionQueue[0] || nextDirection;
+  const target = wrap({x:snake[0].x+next.x,y:snake[0].y+next.y});
+  if (inputMotion?.tickAt === lastMoveAt && same(target,inputMotion.target)) {
+    const progress = Math.min(1,Math.max(0,(now-inputMotion.startedAt)/inputMotion.duration));
+    return interpolateCell(inputMotion.from,target,progress);
+  }
+  return interpolateCell(snake[0],target,alpha);
+}
+
+function visualSnakePositions(alpha, now) {
+  if ((paused || over) && lastVisualPositions.length) return lastVisualPositions;
+  return snake.map((cell,i) => i===0 ? getVisualHead(alpha,now) : interpolateCell(cell,snake[i-1],alpha));
+}
+
 function startAnimation() {
   cancelAnimationFrame(animationFrame);
   let wasPaused = false;
@@ -1197,7 +1274,7 @@ function startAnimation() {
     if(game.classList.contains('hidden')) return;
     if (paused && wasPaused) {animationFrame = requestAnimationFrame(render);return;}
     wasPaused = paused;
-    const alpha = paused || over ? 1 : Math.min(1,Math.max(0,(now-lastMoveAt)/motionDuration));
+    const alpha = movementProgress(now);
     draw(alpha,now);
     if(!over) animationFrame = requestAnimationFrame(render);
   };
@@ -1290,7 +1367,7 @@ function paintSnakeSprite(x,y,index) {
   ctx.drawImage(sprite,x-padding,y-padding,sprite.width/scaleX,sprite.height/scaleY);
 }
 
-function draw(alpha = 1, now = performance.now()) {
+function draw(alpha = movementProgress(), now = performance.now()) {
   paintCachedScene();
 
   // Bolhas no fundo
@@ -1325,7 +1402,8 @@ function draw(alpha = 1, now = performance.now()) {
   drawPlankton(now);
 
   // Interpolação contínua entre passos; a lógica de colisão continua na grade.
-  const positions = snake.map((cell,i) => interpolateCell(previousSnake[i] || cell,cell,alpha));
+  const positions = visualSnakePositions(alpha,now);
+  lastVisualPositions = positions;
   ctx.save();
   ctx.globalAlpha = hasPower('drill') ? .55 : 1;
   ctx.strokeStyle = character === 'bob' ? '#ffd92e' : '#ff829b';
@@ -1341,7 +1419,7 @@ function draw(alpha = 1, now = performance.now()) {
   positions.forEach((cell,i) => paintWrapped(cell, (x,y) => {
     paintSnakeSprite(x,y,i);
   }));
-  drawEyeLaser(alpha);
+  drawEyeLaser(alpha,now);
 }
 
 // =====================================
@@ -1458,9 +1536,9 @@ function drawHouse(x,y,kind) {
   ctx.restore();
 }
 
-function getEyeOrigins(alpha = 1) {
+function getEyeOrigins(alpha = movementProgress(), now = performance.now()) {
   if (!snake.length) return [];
-  const head = interpolateCell(previousSnake[0] || snake[0],snake[0],alpha);
+  const head = getVisualHead(alpha,now);
   const eyes = character === 'bob' ? [{x:7.5,y:7},{x:13.5,y:7}] : [{x:8,y:9},{x:12,y:9}];
   return eyes.map(eye => ({
     x:(head.x*CELL+eye.x)%BOARD_WIDTH,
@@ -1468,11 +1546,11 @@ function getEyeOrigins(alpha = 1) {
   }));
 }
 
-function drawEyeLaser(alpha = 1) {
+function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
   if (!beam || beam.until <= gameTime) return;
   const target = {x:beam.to.x*CELL+10,y:beam.to.y*CELL+10};
   ctx.save();ctx.lineCap='round';ctx.shadowColor='#ff334e';ctx.shadowBlur=8;
-  for (const eye of getEyeOrigins(alpha)) {
+  for (const eye of getEyeOrigins(alpha,now)) {
     ctx.strokeStyle='#ff334e';ctx.lineWidth=2.5;
     ctx.beginPath();ctx.moveTo(eye.x,eye.y);ctx.lineTo(target.x,target.y);ctx.stroke();
     ctx.strokeStyle='#fff4e9';ctx.lineWidth=.7;ctx.stroke();

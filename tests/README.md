@@ -36,3 +36,7 @@ expirar, o mapa mobile menor e a fila de curvas rápidas sem inversão da cobra.
 A grade mobile 18×18 é validada com comida segura, obstáculos proporcionais e
 portais nas bordas. Os testes também confirmam o reaproveitamento de cenários e
 sprites luminosos entre frames e uma única medição dos botões por gesto.
+
+A resposta visual imediata às curvas, continuidade entre passos e pausa/retomada
+sem saltos também são verificadas. A suíte cobre a pausa no canto superior
+direito, transparência dos poderes e preferência de música persistente.

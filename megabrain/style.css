@@ -212,3 +212,14 @@ footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18
 @media(max-width:900px),(pointer:coarse){
   #game .board-wrap{width:min(100%,610px)}
 }
+
+/* Pausa à direita e saída de tela cheia ao lado, sem sobrepor os controles. */
+#game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head{right:max(10px,env(safe-area-inset-right)) !important}
+#game.game-panel:is(:fullscreen,.fallback-fullscreen) #pauseBtn{margin-left:auto;flex-shrink:0}
+#game.game-panel:is(:fullscreen,.fallback-fullscreen) #fullscreenBtn{right:calc(60px + env(safe-area-inset-right)) !important}
+.audio-toggle{display:block;width:100%;min-height:34px;margin:8px 0 10px;border:1px solid #84bbca;border-radius:10px;background:#e3f2f1;color:#07547b;font:800 12px 'Nunito',sans-serif;cursor:pointer}
+.audio-toggle[aria-pressed=true]{background:#153e56;color:#fff}
+#game.game-panel .board-wrap #powerStatus.power-hud{opacity:.82}
+#game.game-panel .board-wrap .power-hud .effect-badge{background:#062a4280}
+#game.game-panel .board-wrap .power-hud .effect-badge strong,
+#game.game-panel .board-wrap .power-hud .effect-badge>span{text-shadow:0 1px 2px #001d30}

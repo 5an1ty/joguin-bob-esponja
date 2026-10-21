@@ -962,9 +962,20 @@ class GameTests(unittest.TestCase):
           food={...snake[0],type:'normal'};collectFood();assert(!burgerIntroActive,'highlight stops after pickup');
           startGame();clearTimeout(timer);assert(!burgerIntroActive,'only first session');goMenu();
         """)
+        self.assertTrue(self.page.locator('#tutorialMenuBtn').is_hidden())
+        self.assertTrue(self.page.locator('#tutorialDifficultyBtn').is_hidden())
+        self.page.locator('[data-mode="battle"]').click()
+        self.assertTrue(self.page.locator('#tutorialDifficultyBtn').is_visible())
         self.page.locator('#tutorialMenuBtn').click()
         self.assertTrue(self.page.locator('#tutorialPreview').is_visible())
         self.assertEqual(self.page.locator('#tutorialCards svg').count(),5)
+        self.page.locator('[data-mode="classic"]').click()
+        self.assertTrue(self.page.locator('#tutorialPreview').is_hidden())
+        self.assertTrue(self.page.locator('#tutorialMenuBtn').is_hidden())
+        self.assertTrue(self.page.locator('#tutorialDifficultyBtn').is_hidden())
+        self.check("assert(!tutorialSelected && gameMode==='classic','classic remains selected');")
+        self.page.locator('[data-mode="battle"]').click()
+        self.page.locator('#tutorialMenuBtn').click()
         self.page.locator('#startTutorialBtn').click()
         self.check("assert(playableTutorial && character==='bob','manual replay');goMenu();assert(!playableTutorial,'menu aborts training');")
 

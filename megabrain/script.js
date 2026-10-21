@@ -667,6 +667,13 @@ function useAbility() {
   updateStatus();return true;
 }
 function updateCharacterChoices() {
+  const battle=gameMode==='battle';
+  for(const id of ['tutorialDifficultyBtn','tutorialMenuBtn']) document.getElementById(id).classList.toggle('hidden',!battle);
+  if(!battle){
+    tutorialSelected=false;
+    document.getElementById('tutorialPreview').classList.add('hidden');
+    document.getElementById('tutorialMenuBtn').setAttribute('aria-expanded','false');
+  }
   if(gameMode!=='battle' && character==='sandy') character='bob';
   document.querySelectorAll('[data-character]').forEach(button=>{
     button.hidden=button.dataset.character==='sandy' && gameMode!=='battle';

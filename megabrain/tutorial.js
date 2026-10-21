@@ -99,7 +99,8 @@ function updateTutorialEnemies() {
   const bomb=obstacles.find(o=>o.bomb && same(o,enemy));if(bomb)explodeBomb(bomb);
 }
 function selectPlayableTutorial() {
-  tutorialSelected=true;gameMode='battle';updateCharacterChoices();updateBestDisplay();
+  if(gameMode!=='battle')return;
+  tutorialSelected=true;updateCharacterChoices();updateBestDisplay();
   document.querySelectorAll('[data-mode]').forEach(button=>{const selected=button.dataset.mode==='battle';button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});
   document.querySelectorAll('.difficulty').forEach(button=>{const selected=button.id==='tutorialDifficultyBtn';button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});
   document.getElementById('tutorialPreview').classList.remove('hidden');document.getElementById('tutorialMenuBtn').setAttribute('aria-expanded','true');
@@ -108,4 +109,4 @@ const cards=document.getElementById('tutorialCards');
 for(const lesson of battleLessons){const card=document.createElement('article');const title=document.createElement('h3');title.textContent=lesson.title;const text=document.createElement('p');text.textContent=lesson.text;card.append(title,lessonImage(lesson),text);cards.append(card);}
 document.getElementById('tutorialMenuBtn').addEventListener('click',selectPlayableTutorial);
 document.getElementById('tutorialDifficultyBtn').addEventListener('click',selectPlayableTutorial);
-document.getElementById('startTutorialBtn').addEventListener('click',beginPlayableTutorial);
+document.getElementById('startTutorialBtn').addEventListener('click',()=>{if(gameMode==='battle')beginPlayableTutorial();});

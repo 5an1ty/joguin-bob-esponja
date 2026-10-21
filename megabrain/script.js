@@ -213,6 +213,8 @@ function resizeBoardForViewport() {
   const active = isFullscreen();
   document.body.classList.toggle('game-fullscreen', active);
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';
+  fullscreenBtn.setAttribute('aria-label',active?'Sair da tela cheia':'Entrar em tela cheia');
+  fullscreenBtn.title=fullscreenBtn.getAttribute('aria-label');
   requestAnimationFrame(() => {
     fitFullscreenBoard();
     if (padPointer !== null) measurePadHitAreas();
@@ -619,10 +621,10 @@ function resolveEnemyContact(enemy) {
 function updateAbilityButton() {
   const button=document.getElementById('abilityBtn');
   button.hidden=gameMode!=='battle';
-  let status='Pronto';
-  if(character==='bob' && abilityReadyAt>gameTime) status=`${Math.ceil((abilityReadyAt-gameTime)/1000)}s`;
-  if(character==='patrick' && patrickCharge<1) status=`${patrickCharge}/1 abate`;
-  if(character==='sandy') status=karateArmed ? `Karatê armado · ${sandyUses}/3` : `${sandyUses}/3 usos${sandyRechargeUnlocked && sandyUses<3?` · Recarga ${sandyRechargeKills}/2 abates`:''}`;
+  let status=character==='bob'?'Pronto · Recarga 30s':'Pronto · Recarga 1 abate';
+  if(character==='bob' && abilityReadyAt>gameTime) status=`Recarga ${Math.ceil((abilityReadyAt-gameTime)/1000)}s`;
+  if(character==='patrick' && patrickCharge<1) status=`Recarga ${patrickCharge}/1 abate`;
+  if(character==='sandy') status=`${karateArmed?'Karatê armado · ':''}${sandyUses}/3 usos · Recarga ${sandyRechargeKills}/2 abates`;
   button.textContent=`Power · ${status}`;
   button.setAttribute('aria-label',`Poder de ${character}: ${status}. Tecla C`);
   button.disabled=paused || over || (character==='bob' && abilityReadyAt>gameTime) || (character==='patrick' && patrickCharge<1) || (character==='sandy' && (karateArmed || sandyUses===0));
@@ -1090,6 +1092,7 @@ document.getElementById('restartBtn')
 
 document.getElementById('menuBtn')
   .addEventListener('click', goMenu);
+document.getElementById('headerMenuBtn').addEventListener('click',goMenu);
 
 // =====================================
 // INICIAR OU REINICIAR O JOGO
@@ -1100,6 +1103,7 @@ function startGame() {
   unlockEffects();
   clearInterval(timer);
   configureGrid();
+  game.classList.toggle('battle-mode',gameMode==='battle');
 
   menu.classList.add('hidden');
   game.classList.remove('hidden');
@@ -1697,7 +1701,8 @@ function fitFullscreenBoard() {
   const portable = matchMedia('(max-width:900px), (pointer:coarse)').matches;
   const margin = portable ? 4 : 14;
   const availableWidth = bounds.width - (sidePad ? pad.width+36 : margin*2);
-  const bottom = pad.height && !sidePad ? pad.top-bounds.top-18 : bounds.height-18;
+  let bottom = pad.height && !sidePad ? pad.top-bounds.top-18 : bounds.height-18;
+  if(gameMode==='battle' && !pad.height) bottom=Math.min(bottom,document.getElementById('abilityBtn').getBoundingClientRect().top-bounds.top-16);
   const availableHeight = Math.max(80,bottom-top);
   const frame = document.querySelector('.board-wrap');
   const style = getComputedStyle(frame);

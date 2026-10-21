@@ -32,3 +32,7 @@ posição ou tamanho do mapa em mobile e PC, com e sem tela cheia, e que a
 indicação permanece fixa no canto superior esquerdo sem interceptar os controles.
 Também verificam o limite de três poderes, o bloqueio de especiais até um efeito
 expirar, o mapa mobile menor e a fila de curvas rápidas sem inversão da cobra.
+
+A grade mobile 18×18 é validada com comida segura, obstáculos proporcionais e
+portais nas bordas. Os testes também confirmam o reaproveitamento de cenários e
+sprites luminosos entre frames e uma única medição dos botões por gesto.

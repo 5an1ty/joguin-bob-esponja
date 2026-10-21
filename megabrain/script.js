@@ -1,5 +1,9 @@
 const canvas = document.getElementById('board');
-const ctx = canvas.getContext('2d');
+let ctx = canvas.getContext('2d', {alpha:false});
+const spriteCache = new Map();
+const sceneLayer = document.createElement('canvas');
+let sceneCacheKey = '';
+const renderStats = {sceneBuilds:0,spriteBuilds:0};
 
 const menu = document.getElementById('menu');
 const game = document.getElementById('game');
@@ -7,11 +11,12 @@ const overlay = document.getElementById('overlay');
 const scoreEl = document.getElementById('score');
 const bestEl = document.getElementById('best');
 
-const COLS = 30;
-const ROWS = 21;
+const mobileBoardQuery = '(max-width:900px), (pointer:coarse)';
+let COLS = matchMedia(mobileBoardQuery).matches ? 18 : 30;
+let ROWS = matchMedia(mobileBoardQuery).matches ? 18 : 21;
 const CELL = 20;
-const BOARD_WIDTH = COLS * CELL;
-const BOARD_HEIGHT = ROWS * CELL;
+let BOARD_WIDTH = COLS * CELL;
+let BOARD_HEIGHT = ROWS * CELL;
 
 // =====================================
 // ADAPTAÇÃO PARA WEB MOBILE
@@ -286,6 +291,23 @@ const settings = {
   }
 };
 
+// A grade é escolhida ao iniciar uma partida; girar a tela não muda a lógica em curso.
+function configureGrid() {
+  const mobile = matchMedia(mobileBoardQuery).matches;
+  COLS = mobile ? 18 : 30;
+  ROWS = mobile ? 18 : 21;
+  BOARD_WIDTH = COLS * CELL;
+  BOARD_HEIGHT = ROWS * CELL;
+  canvas.style.aspectRatio = `${COLS} / ${ROWS}`;
+  canvas.style.maxWidth = `${BOARD_WIDTH}px`;
+  sceneCacheKey = '';
+  spriteCache.clear();
+}
+
+function obstacleCount() {
+  return Math.max(1,Math.round(settings[difficulty].obstacles * COLS * ROWS / (30*21)));
+}
+
 let character = 'bob';
 let difficulty = 'easy';
 
@@ -451,7 +473,7 @@ function addScore(amount) {
   const phase = Math.floor(score / 30);
   if (phase > obstaclePhase) {
     obstaclePhase = phase;
-    generateObstacles(settings[difficulty].obstacles);
+    generateObstacles(obstacleCount());
   }
   scenePhase = Math.floor(score / 100);
   pendingPlanktons += Math.floor(score/200)-Math.floor(previous/200);
@@ -631,6 +653,7 @@ document.getElementById('menuBtn')
 
 function startGame() {
   clearInterval(timer);
+  configureGrid();
 
   menu.classList.add('hidden');
   game.classList.remove('hidden');
@@ -672,7 +695,7 @@ function startGame() {
   scenePhase = 0;
   currentSpeed = settings[difficulty].speed;
 
-  const count = settings[difficulty].obstacles;
+  const count = obstacleCount();
   generateObstacles(count);
 
   if (!placeFood()) return;
@@ -867,11 +890,9 @@ function tick() {
   motionDuration = currentSpeed;
   gameTime += currentSpeed;
   refreshSpeed();
-  const previousDirection = direction;
   direction = directionQueue.shift() || nextDirection;
   nextDirection = directionQueue[0] || direction;
   if (padDirection) setDirection(padDirection);
-  if (!same(previousDirection,direction)) motionDuration = Math.min(60,currentSpeed);
   moveMagnet();
   const head = wrap({x: snake[0].x + direction.x, y: snake[0].y + direction.y});
   // O ímã pode entregar a comida na posição atual da cabeça.
@@ -979,6 +1000,7 @@ document.addEventListener('keydown', e => {
 const directionPad = document.querySelector('.touch-controls');
 let padPointer = null;
 let padDirection = null;
+let padHitAreas = [];
 
 function clearPadPointer(event) {
   if (event && event.pointerId !== padPointer) return;
@@ -988,8 +1010,9 @@ function clearPadPointer(event) {
 }
 
 function steerFromPointer(event) {
-  const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-dir]');
-  const button = hit && directionPad.contains(hit) ? hit : null;
+  const hit = padHitAreas.find(({rect}) => event.clientX >= rect.left && event.clientX <= rect.right &&
+    event.clientY >= rect.top && event.clientY <= rect.bottom);
+  const button = hit?.button;
   if ((button?.dataset.dir || null) === padDirection) return;
   directionPad.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
   if (!button) { padDirection = null; return; }
@@ -1002,6 +1025,7 @@ directionPad.addEventListener('pointerdown', event => {
   if (padPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
   event.preventDefault();
   padPointer = event.pointerId;
+  padHitAreas = Array.from(directionPad.querySelectorAll('[data-dir]'),button => ({button,rect:button.getBoundingClientRect()}));
   // A captura mantém o gesto mesmo no espaço central e fora dos botões.
   directionPad.setPointerCapture(event.pointerId);
   steerFromPointer(event);
@@ -1012,8 +1036,8 @@ function movePadPointer(event) {
   const samples = event.getCoalescedEvents?.();
   steerFromPointer(samples?.length ? samples[samples.length-1] : event);
 }
-directionPad.addEventListener('pointermove', movePadPointer);
-if ('onpointerrawupdate' in window) directionPad.addEventListener('pointerrawupdate', movePadPointer);
+// Usa uma única fonte de eventos, evitando processar o mesmo movimento duas vezes.
+directionPad.addEventListener('onpointerrawupdate' in window ? 'pointerrawupdate' : 'pointermove', movePadPointer);
 directionPad.addEventListener('pointerup', clearPadPointer);
 directionPad.addEventListener('pointercancel', clearPadPointer);
 directionPad.addEventListener('lostpointercapture', clearPadPointer);
@@ -1112,6 +1136,8 @@ function syncCanvasResolution() {
   const width = Math.round(rect.width * ratio), height = Math.round(rect.height * ratio);
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width; canvas.height = height;
+    spriteCache.clear();
+    sceneCacheKey = '';
   }
   ctx.setTransform(width / BOARD_WIDTH, 0, 0, height / BOARD_HEIGHT, 0, 0);
   ctx.imageSmoothingEnabled = true;
@@ -1135,8 +1161,7 @@ function fitFullscreenBoard() {
   const style = getComputedStyle(frame);
   const borderX = parseFloat(style.borderLeftWidth)+parseFloat(style.borderRightWidth);
   const borderY = parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth);
-  const scale = portable ? 0.84 : 1;
-  const width = Math.min(availableWidth, (availableHeight-borderY)*COLS/ROWS+borderX) * scale;
+  const width = Math.min(availableWidth, (availableHeight-borderY)*COLS/ROWS+borderX);
   const height = (width-borderX)*ROWS/COLS+borderY;
   game.style.setProperty('--map-width',`${width}px`);
   game.style.setProperty('--map-height',`${height}px`);
@@ -1167,8 +1192,11 @@ function applyCharacterEffect() {
 
 function startAnimation() {
   cancelAnimationFrame(animationFrame);
+  let wasPaused = false;
   const render = now => {
     if(game.classList.contains('hidden')) return;
+    if (paused && wasPaused) {animationFrame = requestAnimationFrame(render);return;}
+    wasPaused = paused;
     const alpha = paused || over ? 1 : Math.min(1,Math.max(0,(now-lastMoveAt)/motionDuration));
     draw(alpha,now);
     if(!over) animationFrame = requestAnimationFrame(render);
@@ -1180,14 +1208,21 @@ function startAnimation() {
 // DESENHAR O CENÁRIO
 // =====================================
 
-function draw(alpha = 1, now = performance.now()) {
-  ctx.clearRect(
-    0,
-    0,
-    BOARD_WIDTH,
-    BOARD_HEIGHT
-  );
+function paintCachedScene() {
+  const key = `${COLS}:${ROWS}:${scenePhase}:${obstaclePhase}:${canvas.width}:${canvas.height}:${obstacles.map(cellKey).join(',')}`;
+  if (key !== sceneCacheKey) {
+    sceneLayer.width = canvas.width; sceneLayer.height = canvas.height;
+    const target = sceneLayer.getContext('2d');
+    target.setTransform(canvas.width/BOARD_WIDTH,0,0,canvas.height/BOARD_HEIGHT,0,0);
+    // Reutiliza os desenhos vetoriais no cache, sem alterar o contexto principal.
+    const main = ctx;ctx = target;
+    try { drawStaticScene(); } finally {ctx = main;}
+    sceneCacheKey = key;renderStats.sceneBuilds++;
+  }
+  ctx.drawImage(sceneLayer,0,0,BOARD_WIDTH,BOARD_HEIGHT);
+}
 
+function drawStaticScene() {
   // Fundo submarino
   const grad = ctx.createLinearGradient(
     0,
@@ -1227,6 +1262,37 @@ function draw(alpha = 1, now = performance.now()) {
     ctx.stroke();
   }
 
+  drawSeaDecorations();
+
+  // Obstáculos
+  obstacles.forEach((o, i) => {
+    const kind = (i + scenePhase) % 4;
+    if (kind === 0) drawRock(o.x * CELL, o.y * CELL, i);
+    else drawHouse(o.x * CELL, o.y * CELL, kind);
+  });
+
+}
+
+function paintSnakeSprite(x,y,index) {
+  const scaleX=canvas.width/BOARD_WIDTH,scaleY=canvas.height/BOARD_HEIGHT;
+  const key=`${character}:${index===0}:${hasPower('ghost')}:${hasPower('drill')}:${hasPower('super')}:${scaleX}:${scaleY}`;
+  const padding=8,size=CELL+padding*2;
+  let sprite=spriteCache.get(key);
+  if(!sprite) {
+    sprite=document.createElement('canvas');
+    sprite.width=Math.ceil(size*scaleX);sprite.height=Math.ceil(size*scaleY);
+    const target=sprite.getContext('2d');
+    target.setTransform(scaleX,0,0,scaleY,padding*scaleX,padding*scaleY);
+    const main=ctx;ctx=target;
+    try {applyCharacterEffect();drawSnake(0,0,index===0?0:1);} finally {ctx=main;}
+    spriteCache.set(key,sprite);renderStats.spriteBuilds++;
+  }
+  ctx.drawImage(sprite,x-padding,y-padding,sprite.width/scaleX,sprite.height/scaleY);
+}
+
+function draw(alpha = 1, now = performance.now()) {
+  paintCachedScene();
+
   // Bolhas no fundo
   for (let i = 0; i < 13; i++) {
     const x = (i * 83 + 31) % BOARD_WIDTH;
@@ -1248,15 +1314,6 @@ function draw(alpha = 1, now = performance.now()) {
     ctx.stroke();
   }
 
-  drawSeaDecorations();
-
-  // Obstáculos
-  obstacles.forEach((o, i) => {
-    const kind = (i + scenePhase) % 4;
-    if (kind === 0) drawRock(o.x * CELL, o.y * CELL, i);
-    else drawHouse(o.x * CELL, o.y * CELL, kind);
-  });
-
   // Hambúrguer
   if (food) {
     const from = previousFood?.id === food.id ? previousFood : food;
@@ -1270,17 +1327,19 @@ function draw(alpha = 1, now = performance.now()) {
   // Interpolação contínua entre passos; a lógica de colisão continua na grade.
   const positions = snake.map((cell,i) => interpolateCell(previousSnake[i] || cell,cell,alpha));
   ctx.save();
-  applyCharacterEffect();
+  ctx.globalAlpha = hasPower('drill') ? .55 : 1;
   ctx.strokeStyle = character === 'bob' ? '#ffd92e' : '#ff829b';
   ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
   for(let i=1;i<positions.length;i++) {
     const a=positions[i-1], b=positions[i];
     if(Math.abs(a.x-b.x)>1.1 || Math.abs(a.y-b.y)>1.1) continue;
-    ctx.beginPath();ctx.moveTo(a.x*CELL+10,a.y*CELL+10);ctx.lineTo(b.x*CELL+10,b.y*CELL+10);ctx.stroke();
+    ctx.moveTo(a.x*CELL+10,a.y*CELL+10);ctx.lineTo(b.x*CELL+10,b.y*CELL+10);
   }
+  ctx.stroke();
   ctx.restore();
   positions.forEach((cell,i) => paintWrapped(cell, (x,y) => {
-    ctx.save(); applyCharacterEffect(); drawSnake(x,y,i); ctx.restore();
+    paintSnakeSprite(x,y,i);
   }));
   drawEyeLaser(alpha);
 }
@@ -1373,7 +1432,7 @@ function drawSeaDecorations() {
     }
   }
   ctx.globalAlpha=.32; ctx.font='18px sans-serif';
-  for(let i=0;i<8;i++) ctx.fillText(['🪸','🐚','🪼'][i%3],(i*79+scenePhase*17)%580,400-(i%3)*13);
+  for(let i=0;i<8;i++) ctx.fillText(['🪸','🐚','🪼'][i%3],(i*79+scenePhase*17)%(BOARD_WIDTH-20),BOARD_HEIGHT-20-(i%3)*13);
   ctx.restore();
 }
 

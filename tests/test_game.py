@@ -253,6 +253,13 @@ class GameTests(unittest.TestCase):
             client.send('Input.dispatchTouchEvent',{'type':kind,'touchPoints':points})
             if direction:
                 self.page.wait_for_function('(direction) => padDirection===direction',arg=direction)
+        self.page.evaluate('''() => {
+          window.padBoundsReads=0;
+          for(const button of directionPad.querySelectorAll('[data-dir]')) {
+            const measure=button.getBoundingClientRect.bind(button);
+            button.getBoundingClientRect=()=>{window.padBoundsReads++;return measure();};
+          }
+        }''')
         touch('touchStart','up')
         self.assertEqual(self.page.evaluate('nextDirection.y'),-1)
         self.check('tick();assert(direction.y===-1,"held up");')
@@ -265,6 +272,7 @@ class GameTests(unittest.TestCase):
         touch('touchMove','down')
         self.assertEqual(self.page.evaluate('nextDirection.y'),1)
         self.assertEqual(self.page.locator('[data-dir=down]').get_attribute('class'),'pressed')
+        self.assertEqual(self.page.evaluate('padBoundsReads'),4)
         touch('touchEnd')
         self.assertTrue(self.page.evaluate('padPointer===null && padDirection===null'))
         self.assertEqual(self.page.locator('.touch-controls .pressed').count(),0)
@@ -282,7 +290,7 @@ class GameTests(unittest.TestCase):
                 page.evaluate("clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
                 page.wait_for_function('''() => {
                   const r=canvas.getBoundingClientRect();
-                  return Math.abs(r.width/r.height-30/21)<.005 &&
+                  return Math.abs(r.width/r.height-COLS/ROWS)<.005 &&
                     Math.abs(canvas.width-r.width*devicePixelRatio)<=1 &&
                     Math.abs(canvas.height-r.height*devicePixelRatio)<=1;
                 }''')
@@ -291,7 +299,7 @@ class GameTests(unittest.TestCase):
                 self.assertEqual(page.locator('.effect-badge').count(),3)
                 board=page.locator('#board').bounding_box()
                 hud=page.locator('.status-bar').bounding_box()
-                self.assertAlmostEqual(board['width']/board['height'],30/21,delta=.005)
+                self.assertAlmostEqual(board['width']/board['height'],page.evaluate('COLS/ROWS'),delta=.005)
                 if height>width:
                     self.assertGreater(board['y'],hud['y']+hud['height'])
                     pad=page.locator('.touch-controls').bounding_box()
@@ -328,7 +336,7 @@ class GameTests(unittest.TestCase):
           }
         ''')
         self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate("startGame();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         hint=self.page.locator('#foodHint').bounding_box()
         board=self.page.locator('#board').bounding_box()
@@ -369,15 +377,15 @@ class GameTests(unittest.TestCase):
           } finally {ctx.moveTo=original;}
         ''')
 
-    def test_mobile_map_smaller_and_controls_above_bottom_notice(self):
+    def test_mobile_map_uses_available_area_above_controls(self):
         self.page.set_viewport_size({'width':390,'height':844})
-        self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
+        self.page.evaluate("startGame();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         board=self.page.locator('#board').bounding_box()
         pad=self.page.locator('.touch-controls').bounding_box()
-        self.assertGreater(board['width'],290)
-        self.assertLess(board['width'],330)  # Antes: 376px neste viewport.
-        self.assertAlmostEqual(board['width']/board['height'],30/21,delta=.005)
+        self.assertGreater(board['width'],360)
+        self.assertGreater(board['height'],360)  # Antes: aproximadamente 315 × 220px.
+        self.assertAlmostEqual(board['width']/board['height'],self.page.evaluate('COLS/ROWS'),delta=.005)
         self.assertGreaterEqual(844-(pad['y']+pad['height']),55)
         self.assertLess(board['y']+board['height'],pad['y'])
 
@@ -443,7 +451,7 @@ class GameTests(unittest.TestCase):
           setDirection('up');setDirection('left');
           assert(directionQueue.length===2,'two quick turns retained');
           tick();assert(direction.y===-1 && snake[0].y===9,'first turn applied');
-          assert(motionDuration<=60 && currentSpeed===speed,'less visual delay with same game speed');
+          assert(motionDuration===speed && currentSpeed===speed,'continuous movement without stop/go at turns');
           tick();assert(direction.x===-1 && snake[0].x===7,'second turn applied');
           setDirection('right');assert(directionQueue.length===0,'reverse rejected');
           // A gesture arriving while the buffer is full is retried while held.
@@ -453,12 +461,54 @@ class GameTests(unittest.TestCase):
           paused=true;setDirection('left');assert(!directionQueue.length,'paused input ignored');
         ''')
 
+    def test_mobile_grid_has_fewer_larger_cells_and_keeps_rules(self):
+        page=self.browser.new_page(viewport={'width':390,'height':844})
+        try:
+            page.goto(f'http://127.0.0.1:{self.server.server_port}/',wait_until='domcontentloaded')
+            page.evaluate('''() => {
+              const assert=(ok,msg)=>{if(!ok)throw Error(msg);};
+              for(const level of ['easy','medium','hard']) {
+                difficulty=level;startGame();clearInterval(timer);
+                assert(COLS===18 && ROWS===18,'mobile 18x18');
+                assert(obstacles.length===obstacleCount() && connectedArena(obstacles),'obstacle density and connectivity');
+                for(let i=0;i<10;i++) {
+                  assert(placeFood() && food.x<COLS && food.y<ROWS,'food inside reduced grid');
+                  assert(!obstacles.some(o=>same(o,food)),'safe food');
+                }
+              }
+              obstacles=[];food={x:5,y:5,type:'normal'};snake=[{x:17,y:10}];
+              direction=nextDirection={x:1,y:0};tick();clearInterval(timer);
+              assert(snake[0].x===0 && !over,'horizontal portal on reduced grid');
+              snake=[{x:10,y:17}];direction=nextDirection={x:0,y:1};tick();clearInterval(timer);
+              assert(snake[0].y===0 && !over,'vertical portal on reduced grid');
+            }''')
+            page.set_viewport_size({'width':1366,'height':768})
+            self.assertEqual(page.evaluate('[COLS,ROWS]'),[18,18])
+            page.evaluate('startGame();clearInterval(timer)')
+            self.assertEqual(page.evaluate('[COLS,ROWS]'),[30,21])
+        finally:
+            page.close()
+
+    def test_renderer_reuses_scene_and_glow_sprites_between_frames(self):
+        self.check('''
+          powers={ghost:8000,super:6000};
+          draw(.2);
+          const scene=renderStats.sceneBuilds,sprites=renderStats.spriteBuilds;
+          for(let frame=0;frame<20;frame++)draw(frame/20);
+          assert(renderStats.sceneBuilds===scene,'no background/obstacle rebuild per frame');
+          assert(renderStats.spriteBuilds===sprites,'no repeated glow rasterization');
+          scenePhase++;draw(.5);
+          assert(renderStats.sceneBuilds===scene+1,'scene changes invalidate cache');
+          powers={drill:8000};draw(.5);
+          assert(renderStats.spriteBuilds>sprites,'power visuals invalidate sprites');
+        ''')
+
     def test_native_fullscreen_and_exit_to_menu(self):
         self.page.locator('#fullscreenBtn').click()
         self.page.wait_for_function('document.fullscreenElement === game')
         self.page.wait_for_function('''() => {
           const r=canvas.getBoundingClientRect();
-          return Math.abs(r.width/r.height-30/21)<.005 &&
+          return Math.abs(r.width/r.height-COLS/ROWS)<.005 &&
             Math.abs(canvas.width-r.width*devicePixelRatio)<=1;
         }''')
         self.page.locator('#pauseBtn').click()

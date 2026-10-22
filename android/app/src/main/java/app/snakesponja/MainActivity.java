@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
                 if (fullView != null) { callback.onCustomViewHidden(); return; }
                 fullView = view; fullCallback = callback;
                 root.addView(view, new FrameLayout.LayoutParams(-1, -1));
-                setImmersive(true);
+                applyImmersiveMode(true);
             }
             @Override public void onHideCustomView() { leaveFullscreen(); }
         });
@@ -88,10 +88,10 @@ public class MainActivity extends Activity {
     private void leaveFullscreen() {
         if (fullView == null) return;
         root.removeView(fullView); fullView = null;
-        setImmersive(false);
+        applyImmersiveMode(false);
         if (fullCallback != null) { fullCallback.onCustomViewHidden(); fullCallback = null; }
     }
-    private void setImmersive(boolean enabled) {
+    private void applyImmersiveMode(boolean enabled) {
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams params = getWindow().getAttributes();
             params.layoutInDisplayCutoutMode = enabled
@@ -119,7 +119,7 @@ public class MainActivity extends Activity {
     }
     @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && fullView != null) setImmersive(true);
+        if (hasFocus && fullView != null) applyImmersiveMode(true);
     }
     @Override public void onBackPressed() {
         if (fullView != null) { leaveFullscreen(); return; }

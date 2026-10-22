@@ -117,3 +117,5 @@
 /* As preferências de toque aparecem apenas no layout mobile do jogo. */
 .control-settings{display:none}
 @media(max-width:900px),(pointer:coarse){.control-settings{display:block}}
+#game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo .boss-panel{display:flex!important;flex-direction:column;gap:1px;font-size:9px;white-space:nowrap}
+#game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo #bossHealth{width:100%;height:3px;min-height:3px;margin:0}

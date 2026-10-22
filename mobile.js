@@ -91,7 +91,7 @@ joystick.addEventListener('keydown',event=>{
 // Dois toques curtos e próximos ativam o poder. Arrastar, segurar, cancelar,
 // usar controles ou tocar com dois dedos desfaz a sequência.
 canvas.addEventListener('pointerdown',event=>{
-  if(!mobileGameplay || paused || over || gameMode!=='battle')return;
+  if(!mobileGameplay || paused || over || (!isCombatMode() && character!=='dutch'))return;
   const simultaneous=powerTapPointers.size>0;
   if(simultaneous){for(const tap of powerTapPointers.values())tap.cancelled=true;lastPowerTap=null;}
   powerTapPointers.set(event.pointerId,{x:event.clientX,y:event.clientY,at:performance.now(),cancelled:simultaneous});
@@ -102,7 +102,7 @@ canvas.addEventListener('pointermove',event=>{
 });
 canvas.addEventListener('pointerup',event=>{
   const tap=powerTapPointers.get(event.pointerId);powerTapPointers.delete(event.pointerId);
-  if(!tap || paused || over || gameMode!=='battle' || playableTutorial?.lessonPhase==='demo')return;
+  if(!tap || paused || over || (!isCombatMode() && character!=='dutch') || playableTutorial?.lessonPhase==='demo')return;
   const now=performance.now();
   if(tap.cancelled || now-tap.at>230 || Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>10){lastPowerTap=null;return;}
   if(lastPowerTap && now-lastPowerTap.at<=300 && Math.hypot(tap.x-lastPowerTap.x,tap.y-lastPowerTap.y)<=36){
@@ -156,6 +156,7 @@ function reflowMobileArena(cols,rows){
   directionQueue=[];nextDirection={...direction};resetMobileInput();
   sceneCacheKey='';spriteCache.clear();
   canvas.style.aspectRatio=`${COLS} / ${ROWS}`;canvas.style.maxWidth='none';
+  if(typeof reflowBulletWorld==='function')reflowBulletWorld();
   return true;
 }
 function fitMobileFullscreenBoard(){
@@ -177,6 +178,7 @@ function fitMobileFullscreenBoard(){
   });
   if(food && (changed || foodUnderMobileControls(food) || snake.some(p=>same(p,food)) || obstacles.some(p=>same(p,food)) || activeEnemies().some(p=>same(p,food)))){const type=food.type;if(placeFood())food.type=type;}
   if(changed && playableTutorial?.lessonPhase==='demo')prepareTutorialLesson(playableTutorial.stage);
+  if(gameMode==='bullet')updateBulletHud();
   syncCanvasResolution();
 }
 

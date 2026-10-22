@@ -106,3 +106,11 @@ Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo men
 `test_power_mobile_readability.py` verifica os indicadores compactos de poderes no espaço central da mesma faixa de pontuação e controles, em quatro tamanhos, sem faixa No mapa, sem cartões sobre a arena e sem mudanças no tamanho do tabuleiro. Também percorre demonstração e prática com animação de dois toques: um toque não ativa a habilidade, o segundo ativa e avança, e a orientação desaparece ao concluir ou sair do treino.
 
 `test_joystick_position.py` verifica o editor de posição acessível pelo menu de pausa: arrastar, salvar, cancelar e restaurar o padrão; manter pontuação e pausa; continuar usando o joystick reposicionado; salvar posições distintas na vertical/horizontal e recuperá-las após recarregar.
+
+## Bullet Hell e Holandês Voador
+
+`test_bullet_hell.py` cobre metas por fase (5/8/10), velocidade alterada apenas na transição, escudo de 3 segundos a cada 3 lanches, reset do contador, composição de inimigos, sombras/impacto/quatro estilhaços, dano de verdes em Plankton/chefe, aviso sonoro antes do tiro, alternância verde/vermelho, desbloqueio persistente e fase infinita. A fase 11 é vencida exclusivamente ao derrotar o chefe, sem cota de verdes. A partir da fase 12, 10 verdes avançam cada fase infinita.
+
+Os projéteis verdes saem nas quatro direções **ao coletar** o hambúrguer. O lanche amarelo da habilidade do Bob é um bônus separado, preservando a sequência principal; ele não aumenta a velocidade do Bullet Hell. A rotação limpa tiros e sombras em trânsito para evitar colisões causadas pela mudança da grade, preservando fase, pontuação e inimigos. Um bônus amarelo ainda não coletado é removido com devolução da recarga.
+
+O Holandês desbloqueado atravessa o próprio corpo, mas continua sujeito a obstáculos e inimigos. Seu tiro tem recarga de 15 segundos, destrói o primeiro obstáculo atingido ou causa 1 de dano no primeiro inimigo. Os testes também cobrem pausa, rotação mobile, poder por dois toques e decodificação dos MP3 enviados pelo usuário (`bgm_bullet_mode.mp3` e `bgm_bullet_boss.mp3`).

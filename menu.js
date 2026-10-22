@@ -1,5 +1,6 @@
 (() => {
   const characters = {
+    dutch: ['Holandês Voador', 'O terror incorpóreo dos sete mares.'],
     bob: ['Bob Esponja', 'O otimismo é seu superpoder.'],
     patrick: ['Patrick', 'Seu melhor amigo nessa aventura.'],
     sandy: ['Sandy Bochechas', 'Coragem e karatê no fundo do mar.']

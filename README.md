@@ -67,7 +67,8 @@ Após cada escolha de card, a simulação inteira acelera de 0% a 100% em 4 segu
 
 A interface usa HTML/CSS/JavaScript compartilhados com o jogo web. `ocean.css`
 moderniza a identidade náutica sem alterar o mapa em tela cheia.
-`docs/` é a landing page independente publicada pelo workflow `pages.yml`.
+`docs/` é a landing page independente publicada em
+https://5an1ty.github.io/joguin-bob-esponja/docs/ pelo GitHub Pages existente.
 A página consulta a release mais recente para obter o APK real, com fallback
 para a lista de releases se não houver arquivo ou se a API estiver indisponível.
 
@@ -82,6 +83,6 @@ os dados locais. Para distribuição definitiva, configure uma chave de release
 permanente em secrets antes de migrar a assinatura. Nunca armazene chave privada
 no repositório. A geração automatizada não substitui teste em aparelho Android.
 
-GitHub Pages usa apenas `docs/`; Netlify continua servindo `dist/` com o jogo.
-Caso a conta não permita ativação automática de Pages, selecione
-Settings → Pages → Source → GitHub Actions no repositório.
+GitHub Pages publica a branch `main` e disponibiliza a landing em `/docs/`.
+Netlify continua servindo `dist/` com o jogo. Não há workflow adicional de Pages
+para disputar a publicação automática já configurada no repositório.

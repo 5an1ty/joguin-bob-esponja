@@ -29,7 +29,7 @@ function beginPlayableTutorial() {
 }
 function prepareTutorialLesson(index,phase="demo") {
   const lesson=battleLessons[index];if(!lesson)return;
-  stopMovementGuide();
+  stopMovementGuide();clearPowerTapCoach();
   playableTutorial.lessonPhase=phase;playableTutorial.demoStartedAt=performance.now();
   playableTutorial.stage=index;playableTutorial.explained=false;playableTutorial.final=false;
   tutorialSlowdown=null;gameTime=0;score=0;battleKills=0;battleWave=index<3?1:2;scenePhase=0;obstaclePhase=0;
@@ -49,6 +49,10 @@ function prepareTutorialLesson(index,phase="demo") {
   document.getElementById('trainingObjective').hidden=false;document.getElementById('trainingObjective').textContent=(phase==='demo'?'Observe: ':'Sua vez: ')+lesson.task;
   updateStatus();draw();if(!paused)scheduleTick();
   if(index===0 && phase==='practice' && mobileGameplay)beginMovementGuide();
+  if(index===1 && mobileGameplay){
+    document.getElementById('trainingObjective').textContent=phase==='demo'?'Observe os dois toques rápidos para ativar o poder.':'Sua vez: dê dois toques rápidos no mapa para ativar o poder.';
+    showPowerTapCoach(phase);
+  }
 }
 function triggerTutorialLesson(id) {
   if(!playableTutorial || playableTutorial.explained || tutorialSlowdown || battleLessons[playableTutorial.stage].id!==id)return;
@@ -70,7 +74,7 @@ function showPlayableLesson() {
   if(playableTutorial.lessonPhase==='demo') {
     prepareTutorialLesson(playableTutorial.stage,'practice');return;
   }
-  stopMovementGuide();
+  stopMovementGuide();clearPowerTapCoach();
   playableTutorial.explained=true;if(!paused)togglePause();
   const lesson=battleLessons[playableTutorial.stage];
   document.getElementById('overlayTitle').textContent=lesson.title;
@@ -97,6 +101,7 @@ function advancePlayableTutorial() {
   document.getElementById('resumeBtn').textContent='CONTINUAR';return true;
 }
 function abortPlayableTutorial() {
+  clearPowerTapCoach();
   if(!playableTutorial)return;
   const config=playableTutorial.config;playableTutorial=null;tutorialSlowdown=null;tutorialSelected=false;game.classList.remove('tutorial-mode');
   document.getElementById('trainingObjective').hidden=true;document.getElementById('resumeBtn').textContent='CONTINUAR';restoreTutorialConfig(config);

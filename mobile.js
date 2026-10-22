@@ -89,8 +89,13 @@ canvas.addEventListener('pointerup',event=>{
   const now=performance.now();
   if(tap.cancelled || now-tap.at>230 || Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>10){lastPowerTap=null;return;}
   if(lastPowerTap && now-lastPowerTap.at<=300 && Math.hypot(tap.x-lastPowerTap.x,tap.y-lastPowerTap.y)<=36){
-    lastPowerTap=null;useAbility();
-  }else lastPowerTap={x:tap.x,y:tap.y,at:now};
+    lastPowerTap=null;if(useAbility())updatePowerTapCoach('complete');
+  }else {
+    lastPowerTap={x:tap.x,y:tap.y,at:now};
+    updatePowerTapCoach('first');
+    const pending=lastPowerTap;
+    setTimeout(()=>{if(lastPowerTap===pending)updatePowerTapCoach('practice');},310);
+  }
 });
 canvas.addEventListener('pointercancel',resetMobileInput);
 directionPad.addEventListener('pointerdown',()=>{lastPowerTap=null;});
@@ -146,6 +151,8 @@ function fitMobileFullscreenBoard(){
   const frame=document.querySelector('.board-wrap');
   // Store rectangles in cell coordinates once per layout, never on every spawn.
   const frameRect=frame.getBoundingClientRect();
+  const statusBottom=document.querySelector('.status-bar').getBoundingClientRect().bottom-bounds.top;
+  game.style.setProperty('--power-hud-top',`${Math.max(76,statusBottom+10)}px`);
   const zones=[document.querySelector('.game-head'),document.querySelector('.status-bar'),...dock.children];
   mobileFoodOcclusions=zones.filter(el=>getComputedStyle(el).display!=='none').map(el=>{
     const b=el.getBoundingClientRect();
@@ -269,3 +276,17 @@ function updateOrientationHint(){
 }
 
 applyControlPreferences();
+
+function clearPowerTapCoach(){document.getElementById('powerTapCoach')?.remove();}
+function showPowerTapCoach(phase){
+  clearPowerTapCoach();resetMobileInput();
+  const coach=document.createElement('div');coach.id='powerTapCoach';coach.className='power-tap-coach';coach.setAttribute('role','status');
+  coach.innerHTML='<span class="tap-gesture" aria-hidden="true"><svg viewBox="0 0 64 72" xmlns="http://www.w3.org/2000/svg"><path d="M23 38V14c0-7 10-7 10 0v19-5c0-6 9-6 9 0v7-3c0-6 9-6 9 0v8c0-6 9-6 9 0v13c0 11-7 17-18 17H31c-6 0-10-3-14-8L5 47c-4-6 4-12 9-7l9 9Z" fill="#ffe1b9" stroke="#b2755e" stroke-width="3" stroke-linejoin="round"/></svg></span><strong></strong><small></small>';
+  document.querySelector('.board-wrap').append(coach);updatePowerTapCoach(phase);
+}
+function updatePowerTapCoach(state){
+  const coach=document.getElementById('powerTapCoach');if(!coach)return;
+  const messages={demo:['Observe: dois toques rápidos','Toque, toque! O poder é ativado sem arrastar.'],practice:['Sua vez: dê dois toques rápidos','Toque duas vezes no mesmo lugar do mapa, sem arrastar.'],first:['Mais um toque rápido!','Toque de novo no mesmo lugar.'],complete:['Poder ativado!','Você aprendeu a usar a habilidade com dois toques.']};
+  const copy=messages[state] || messages.practice;
+  coach.dataset.state=state;coach.querySelector('strong').textContent=copy[0];coach.querySelector('small').textContent=copy[1];
+}

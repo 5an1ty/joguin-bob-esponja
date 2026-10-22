@@ -104,3 +104,5 @@ Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo men
 `test_mobile_pause_hud.py` verifica o ícone de pausa no topo, ausência dos botões inferiores e reinício/continuação dentro do menu em telas vertical, horizontal e tablet.
 
 `test_power_mobile_readability.py` verifica os indicadores compactos de poderes no espaço central da mesma faixa de pontuação e controles, em quatro tamanhos, sem faixa No mapa, sem cartões sobre a arena e sem mudanças no tamanho do tabuleiro. Também percorre demonstração e prática com animação de dois toques: um toque não ativa a habilidade, o segundo ativa e avança, e a orientação desaparece ao concluir ou sair do treino.
+
+`test_joystick_position.py` verifica o editor de posição acessível pelo menu de pausa: arrastar, salvar, cancelar e restaurar o padrão; manter pontuação e pausa; continuar usando o joystick reposicionado; salvar posições distintas na vertical/horizontal e recuperá-las após recarregar.

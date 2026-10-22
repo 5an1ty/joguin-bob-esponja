@@ -30,8 +30,10 @@ class PowerMobileReadabilityTests(unittest.TestCase):
             self.assertEqual(self.page.locator('#powerStatus .effect-badge').count(),3)
             for badge in self.page.locator('#powerStatus .effect-badge').all():
                 self.assertGreaterEqual(badge.bounding_box()['height'],15)
-                self.assertEqual(badge.locator('strong').evaluate("el=>getComputedStyle(el,'::after').fontSize"),'12px')
+                self.assertEqual(badge.locator('strong').evaluate("el=>getComputedStyle(el,'::after').fontSize"),'10px' if width<=360 else '12px')
                 self.assertEqual(badge.locator('span').get_attribute('data-hud-time')[-1],'s')
+                self.assertIn(badge.locator('strong').get_attribute('data-hud-label'),['Atravessa corpo','Atravessa pedras','Atrai comida'])
+                self.assertTrue(badge.locator('strong').evaluate("el=>{const c=document.createElement('canvas').getContext('2d');c.font=getComputedStyle(el,'::after').font;return c.measureText(el.dataset.hudLabel).width<=el.getBoundingClientRect().width+1}"))
             self.assertEqual(self.page.locator('#board').bounding_box(),baseline)
             self.page.evaluate('powers={};updateStatus()')
             self.assertTrue(self.page.locator('#powerStatus').is_hidden())

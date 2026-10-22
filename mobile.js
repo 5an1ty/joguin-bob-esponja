@@ -37,6 +37,7 @@ function positionPauseControl(){
   button.disabled=mobile && over;
   syncMobileControls();
   positionMobileHud();
+  positionJoystick();
 }
 function applyControlPreferences(){
   positionPauseControl();
@@ -169,7 +170,7 @@ function fitMobileFullscreenBoard(){
   const frameRect=frame.getBoundingClientRect();
   const statusBottom=document.querySelector('.status-bar').getBoundingClientRect().bottom-bounds.top;
   game.style.setProperty('--power-hud-top',`${Math.max(76,statusBottom+10)}px`);
-  const zones=[document.querySelector('.game-head'),document.querySelector('.status-bar'),...dock.children];
+  const zones=[document.querySelector('.game-head'),document.querySelector('.status-bar'),joystick,...dock.children];
   mobileFoodOcclusions=zones.filter(el=>getComputedStyle(el).display!=='none').map(el=>{
     const b=el.getBoundingClientRect();
     return {left:(b.left-frameRect.left)/bounds.width*COLS-.5,right:(b.right-frameRect.left)/bounds.width*COLS-.5,top:(b.top-frameRect.top)/bounds.height*ROWS-.5,bottom:(b.bottom-frameRect.top)/bounds.height*ROWS-.5};
@@ -232,6 +233,7 @@ function syncMobileControls(){
   top.disabled=mobile && over;
   if(mobile)top.innerHTML='<span class="pause-icon" aria-hidden="true"></span>';
   else top.textContent=over?'Jogar novamente':paused?'Continuar':'Pausar';
+  joystickEditButton.hidden=mobileControlMode!=='joystick' || !mobile || over;
   top.setAttribute('aria-label',mobile?(paused?'Retomar jogo':'Pausar jogo'):(over?'Jogar novamente':paused?'Retomar jogo':'Pausar jogo'));
 }
 // A habilidade pronta é indicada por estado real, incluindo alterações de recarga.
@@ -291,7 +293,7 @@ function updateOrientationHint(){
   if(matches && orientationResumePending){orientationResumePending=false;if(paused && !over)togglePause();}
 }
 
-applyControlPreferences();
+
 
 function clearPowerTapCoach(){document.getElementById('powerTapCoach')?.remove();}
 function showPowerTapCoach(phase){
@@ -306,3 +308,95 @@ function updatePowerTapCoach(state){
   const copy=messages[state] || messages.practice;
   coach.dataset.state=state;coach.querySelector('strong').textContent=copy[0];coach.querySelector('small').textContent=copy[1];
 }
+
+// Posições separadas por orientação, relativas à área disponível do jogo.
+let joystickPositions={};
+try{
+  const saved=JSON.parse(localStorage.getItem('bobSnakeJoystickPositions') || '{}');
+  for(const key of ['portrait','landscape'])if(saved?.[key] && [saved[key].x,saved[key].y].every(n=>Number.isFinite(n)&&n>=0&&n<=1))joystickPositions[key]=saved[key];
+}catch{}
+let joystickEditor=null;
+let joystickEditorPointer=null;
+const joystickEditButton=document.createElement('button');joystickEditButton.id='editJoystickBtn';joystickEditButton.type='button';joystickEditButton.className='secondary';joystickEditButton.textContent='Posicionar joystick';
+document.querySelector('.overlay-card').insertBefore(joystickEditButton,document.getElementById('resumeBtn'));
+const joystickEditBar=document.createElement('section');joystickEditBar.id='joystickEditBar';joystickEditBar.hidden=true;joystickEditBar.setAttribute('aria-label','Ajustar posição do joystick');
+joystickEditBar.innerHTML='<strong>Arraste o joystick para onde preferir</strong><span>A posição fica salva para esta orientação.</span><div><button type="button" data-joystick-edit="save">Salvar posição</button><button type="button" data-joystick-edit="reset">Padrão</button><button type="button" data-joystick-edit="cancel">Cancelar</button></div>';
+game.append(joystickEditBar);
+function joystickOrientation(){return innerWidth>innerHeight?'landscape':'portrait';}
+function placeJoystickAt(x,y){
+  const bounds=game.getBoundingClientRect(),size=128;
+  const header=document.querySelector('.game-head').getBoundingClientRect();
+  const minY=Math.max(8,header.bottom-bounds.top+8);
+  const left=Math.max(8,Math.min(bounds.width-size-8,x));
+  let top=Math.max(minY,Math.min(bounds.height-size-8,y));
+  const power=document.getElementById('abilityBtn').getBoundingClientRect();
+  if(power.width && power.height && left+size>power.left-bounds.left && left<power.right-bounds.left && top+size>power.top-bounds.top && top<power.bottom-bounds.top)top=Math.max(minY,power.top-bounds.top-size-8);
+  if(joystick.parentElement!==game)game.append(joystick);
+  joystick.classList.add('custom-position');
+  joystick.style.left=`${left}px`;joystick.style.top=`${top}px`;
+  return {x:left/Math.max(1,bounds.width-size),y:top/Math.max(1,bounds.height-size)};
+}
+function positionJoystick(){
+  joystickEditButton.hidden=mobileControlMode!=='joystick' || !matchMedia(mobileBoardQuery).matches || over;
+  if(joystickEditor && joystickEditor.orientation!==joystickOrientation())finishJoystickEdit(false);
+  const saved=joystickEditor?joystickEditor.draft:joystickPositions[joystickOrientation()];
+  if(saved && mobileControlMode==='joystick' && matchMedia(mobileBoardQuery).matches){
+    const bounds=game.getBoundingClientRect();
+    if(bounds.width && bounds.height)placeJoystickAt(saved.x*(bounds.width-128),saved.y*(bounds.height-128));
+  }else if(!joystickEditor){
+    if(joystick.parentElement!==dock)dock.insertBefore(joystick,document.getElementById('abilityBtn'));
+    joystick.classList.remove('custom-position');joystick.style.removeProperty('left');joystick.style.removeProperty('top');
+  }
+}
+function beginJoystickEdit(){
+  if(!paused || over || mobileControlMode!=='joystick')return;
+  const box=joystick.getBoundingClientRect(),bounds=game.getBoundingClientRect();
+  joystickEditor={orientation:joystickOrientation(),draft:placeJoystickAt(box.left-bounds.left,box.top-bounds.top)};
+  resetMobileInput();overlay.classList.add('hidden');joystickEditBar.hidden=false;joystick.classList.add('editing-position');
+  joystick.setAttribute('aria-label','Posição do joystick: arraste ou use as setas do teclado');joystick.focus({preventScroll:true});
+}
+function finishJoystickEdit(save){
+  if(!joystickEditor)return;
+  if(save){
+    if(joystickEditor.draft)joystickPositions[joystickEditor.orientation]=joystickEditor.draft;
+    else delete joystickPositions[joystickEditor.orientation];
+    localStorage.setItem('bobSnakeJoystickPositions',JSON.stringify(joystickPositions));
+  }
+  joystickEditor=null;joystickEditorPointer=null;joystickEditBar.hidden=true;joystick.classList.remove('editing-position');
+  joystick.setAttribute('aria-label','Joystick: arraste para mudar de direção');
+  if(paused)overlay.classList.remove('hidden');
+  positionJoystick();resizeBoardForViewport();joystickEditButton.focus({preventScroll:true});
+}
+joystickEditButton.addEventListener('click',beginJoystickEdit);
+joystickEditBar.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{
+  if(button.dataset.joystickEdit==='reset'){
+    joystickEditor.draft=null;
+    if(joystick.parentElement!==dock)dock.insertBefore(joystick,document.getElementById('abilityBtn'));
+    joystick.classList.remove('custom-position');joystick.style.removeProperty('left');joystick.style.removeProperty('top');
+  }else finishJoystickEdit(button.dataset.joystickEdit==='save');
+}));
+joystick.addEventListener('pointerdown',event=>{
+  if(!joystickEditor)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const box=joystick.getBoundingClientRect();joystickEditorPointer={id:event.pointerId,dx:event.clientX-box.left,dy:event.clientY-box.top};
+  try{joystick.setPointerCapture(event.pointerId);}catch{}
+},true);
+joystick.addEventListener('pointermove',event=>{
+  if(!joystickEditor || event.pointerId!==joystickEditorPointer?.id)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const bounds=game.getBoundingClientRect();
+  joystickEditor.draft=placeJoystickAt(event.clientX-bounds.left-joystickEditorPointer.dx,event.clientY-bounds.top-joystickEditorPointer.dy);
+},true);
+for(const type of ['pointerup','pointercancel','lostpointercapture'])joystick.addEventListener(type,event=>{
+  if(joystickEditor && event.pointerId===joystickEditorPointer?.id){event.stopImmediatePropagation();joystickEditorPointer=null;}
+},true);
+document.addEventListener('keydown',event=>{
+  if(!joystickEditor)return;
+  if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finishJoystickEdit(false);return;}
+  const delta={ArrowLeft:[-8,0],ArrowRight:[8,0],ArrowUp:[0,-8],ArrowDown:[0,8]}[event.key];
+  if(delta && event.target===joystick){
+    event.preventDefault();event.stopImmediatePropagation();const box=joystick.getBoundingClientRect(),bounds=game.getBoundingClientRect();
+    joystickEditor.draft=placeJoystickAt(box.left-bounds.left+delta[0],box.top-bounds.top+delta[1]);
+  }
+},true);
+applyControlPreferences();

@@ -478,7 +478,7 @@ function updateStatus() {
       const title = document.createElement('strong');
       const shortLabels = {ghost:'Atravessa corpo',drill:'Atravessa pedras',super:'Imune + turbo',magnet:'Atrai comida'};
       title.textContent = `${effect.icon} ${shortLabels[type]}`;
-      title.dataset.hudLabel={ghost:'Corpo',drill:'Pedras',super:'Turbo',magnet:'Ímã'}[type];
+      title.dataset.hudLabel=shortLabels[type];
       badge.title = effect.label;
       const remaining = document.createElement('span');
       const meter = document.createElement('progress');
@@ -1630,6 +1630,7 @@ window.addEventListener('blur', () => clearPadPointer());
 // =====================================
 
 function togglePause() {
+  if(typeof joystickEditor!=='undefined' && joystickEditor){finishJoystickEdit(false);return;}
   orientationResumePending=false;
   if(playableTutorial?.explained && paused && !playableTutorial.advancing)return;
   if (over) return;

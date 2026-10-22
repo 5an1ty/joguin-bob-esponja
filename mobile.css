@@ -100,3 +100,17 @@
   #game.game-panel:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo .boss-panel{display:flex;justify-content:center;max-width:100%;font-size:9px;line-height:1.3;text-align:center;color:#edfbff;text-shadow:0 1px 2px #001627;overflow-wrap:anywhere}
   #game.game-panel:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo:has(#powerStatus:not([hidden])) .boss-panel{display:none}
 }
+@media(max-width:360px){
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head{gap:4px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .stat{width:42px;padding:4px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .power-hud .effect-badge{gap:2px;padding-left:3px;padding-right:3px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .power-hud .effect-badge strong:after{font-size:10px}
+  #game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .power-hud .effect-badge>span:after{font-size:11px}
+}
+#editJoystickBtn[hidden],#joystickEditBar[hidden]{display:none!important}
+#game.game-panel #joystick.custom-position{position:absolute!important;right:auto!important;bottom:auto!important;margin:0!important;z-index:4;pointer-events:auto}
+#joystick.editing-position{z-index:12!important;outline:3px dashed #ffe671;outline-offset:6px;cursor:move}
+#joystickEditBar{position:absolute;left:50%;top:70px;transform:translateX(-50%);width:min(94%,410px);z-index:15;padding:13px;border:2px solid #8aebfa;border-radius:18px;background:#07334ff5;color:#fff;text-align:center}
+#joystickEditBar strong,#joystickEditBar span{display:block;line-height:1.4}#joystickEditBar strong{font-size:15px}#joystickEditBar span{font-size:11px;color:#c2eaf6;margin-top:3px}#joystickEditBar>div{display:flex;justify-content:center;gap:7px;margin-top:10px}#joystickEditBar button{min-height:44px;padding:8px 11px;border:0;border-radius:11px;background:#c4eff9;color:#12445e;font:900 12px Nunito,system-ui;cursor:pointer}
+#game.game-panel{position:relative}
+@media(max-width:360px){#game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .stat strong{font-size:13px}}

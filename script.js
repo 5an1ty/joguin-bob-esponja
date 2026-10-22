@@ -794,7 +794,10 @@ function releaseFrostBreath() {
     }).sort((a,b)=>Math.hypot(a.v.x,a.v.y)-Math.hypot(b.v.x,b.v.y));
   const length=Math.max(9,...victims.map(({v})=>Math.hypot(v.x,v.y)));
   frostBreath={from,angle,length,startedAt:gameTime,until:gameTime+900};
-  victims.forEach(({enemy},i)=>{if(i===0 || gameMode!=='bullet')damageBattleEnemy(enemy,i===0?2:1);enemy.frozenUntil=gameTime+3000;});
+  victims.forEach(({enemy},i)=>{
+    const damage=gameMode==='bullet'?(bulletState.upgrade==='frost'?(i===0?3:2):(i===0?2:0)):(i===0?2:1);
+    if(damage)damageBattleEnemy(enemy,damage);enemy.frozenUntil=gameTime+3000;
+  });
   finishBattleAttack();
 }
 
@@ -1143,6 +1146,7 @@ function restartImmediately() {
 
 function startGame(options={}) {
   if(!options.skipTutorial && !playableTutorial && (tutorialSelected || (gameMode==='battle' && localStorage.getItem('bobSnakeBattlePlayableTutorialSeen')!=='true'))) {beginPlayableTutorial();return;}
+  if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();bulletState.upgradePending=false;}
   stopMovementGuide();
   stopEffects();
   unlockEffects();
@@ -1471,6 +1475,7 @@ function tick(stepAt = performance.now()) {
   snake.unshift(head);
   if (eating) {
     if (!collectFood()) { draw(); return; }
+    if(paused){updateStatus();draw();return;}
   } else snake.pop();
   spawnPlankton();
   updatePlankton();
@@ -1663,6 +1668,7 @@ window.addEventListener('blur', () => clearPadPointer());
 // =====================================
 
 function togglePause() {
+  if(gameMode==='bullet' && bulletState.upgradePending)return;
   if(typeof joystickEditor!=='undefined' && joystickEditor){finishJoystickEdit(false);return;}
   orientationResumePending=false;
   if(playableTutorial?.explained && paused && !playableTutorial.advancing)return;
@@ -1724,6 +1730,7 @@ function togglePause() {
 
 function endGame() {
   if (over) return;
+  if(gameMode==='bullet' && tryBulletRevive())return;
   stopMovementGuide();
   resetMobileInput();
   playEffect('death');
@@ -1761,6 +1768,7 @@ function endGame() {
 // =====================================
 
 function goMenu() {
+  if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();bulletState.upgradePending=false;}
   abortPlayableTutorial();
   stopMovementGuide();
   clearCanvasDrag();

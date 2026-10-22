@@ -1,5 +1,5 @@
 // Bullet Hell: clocks use gameTime so pause freezes hazards, warnings and shots.
-const bulletState={phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
+const bulletState={upgrade:null,upgradePending:false,reviveCharges:0,reviveUntil:0,reviveNoticeUntil:0,phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
 let dutchUnlocked=localStorage.getItem('bobSnakeDutchUnlocked')==='true';
 let dutchProjectiles=[];
 const DUTCH_BOSS_HEALTH=10;
@@ -7,7 +7,7 @@ function bulletGoal(phase){return phase<=4?5:phase<=7?8:10;}
 function bulletProfile(phase){
   const level=phase===11?10:phase;
   const scale=Math.pow(.94,level-1);
-  return {snakeSpeed:Math.max(55,settings[difficulty].speed*scale),enemyInterval:Math.max(phase===11?420:150,settings[difficulty].bossInterval*scale),shotSpeed:Math.min(15,5+level*.35),cannonDelay:Math.max(780,3200-level*165)*(phase===11?1.2:1),maxCannons:Math.max(1,Math.min(12,Math.ceil(level/2))-(phase===11?1:0)),count:Math.min(10,1+Math.floor(level/2)),obstacles:Math.min(Math.floor(COLS*ROWS*.17),level<3?3:5+(level-3)*4)};
+  return {snakeSpeed:Math.max(55,settings[difficulty].speed*scale),enemyInterval:Math.max(phase===11?420:150,settings[difficulty].bossInterval*scale),shotSpeed:Math.min(15,5+level*.35),cannonBatch:Math.min(4,1+Math.floor((level-1)/3))-(phase===11?1:0),cannonDelay:Math.max(650,2600-level*145)*(phase===11?1.2:1),maxCannons:Math.max(1,Math.min(18,2+level)-(phase===11?2:0)),count:Math.min(10,1+Math.floor(level/2)),obstacles:Math.min(Math.floor(COLS*ROWS*.17),level<3?3:5+(level-3)*4)};
 }
 function updateDutchChoice(){
   const card=document.querySelector('[data-character=dutch]');if(!card)return;
@@ -21,6 +21,7 @@ function updateBulletRecord(){
   updateBestDisplay();
 }
 function startBulletMode(){
+  closeBulletUpgrade();bulletState.upgrade=null;bulletState.upgradePending=false;bulletState.reviveCharges=0;bulletState.reviveUntil=0;bulletState.reviveNoticeUntil=0;
   bulletState.phase=1;bulletState.progress=0;bulletState.immunityCount=0;bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];bulletState.phasePending=false;bulletState.bossDefeated=false;
   beginBulletPhase(1);
 }
@@ -28,7 +29,7 @@ function safeBulletSpawn(minDistance=5){
   const cells=[];
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
     const p={x,y};
-    if(torusDistance(p,snake[0])>=minDistance && !snake.some(s=>same(s,p)) && !obstacles.some(s=>same(s,p)) && !bulletState.enemies.some(s=>same(s,p)) && !mapFoods().some(s=>same(s,p)) && !foodUnderMobileControls(p))cells.push(p);
+    if(torusDistance(p,snake[0])>=minDistance && !snake.some(s=>same(s,p)) && !obstacles.some(s=>same(s,p)) && !bulletState.enemies.some(s=>same(s,p)) && !bulletState.hazards.some(s=>same(s,p)) && !mapFoods().some(s=>same(s,p)) && !foodUnderMobileControls(p))cells.push(p);
   }
   return cells.length?cells[Math.floor(Math.random()*cells.length)]:null;
 }
@@ -50,6 +51,7 @@ function beginBulletPhase(phase){
   for(let i=0;i<bulletState.profile.count;i++)createBulletEnemy(i);
   if(phase===11)createBulletEnemy(0,'dutch');
   sceneCacheKey='';refreshSpeed();
+  if(phase===5 && !bulletState.upgrade)showBulletUpgrade();
 }
 function chooseBulletFood(){return bulletState.nextFood;}
 function collectBulletFood(){
@@ -67,7 +69,7 @@ function collectBulletFood(){
   if(type==='green')emitFourShots(eaten,'green');
   if(!bonus && (type==='green' || type==='red'))bulletState.nextFood=type==='green'?'red':'green';
   bulletState.immunityCount++;
-  if(bulletState.immunityCount>=3){bulletState.immunityCount=0;powers.immunity=gameTime+3000;playEffect('super');}
+  if(bulletState.immunityCount>=3){bulletState.immunityCount=0;powers.immunity=Math.max(powers.immunity||0,gameTime+3000);playEffect('super');}
   if(type==='green')bulletState.progress++;
   addScore(10);
   if(++battleBurgers>=10){battleBurgers=0;releaseFrostBreath();}
@@ -117,6 +119,7 @@ function deployBossBarrage(enemy){
 function updateBulletMode(){
   // Finish the current attack before replacing the phase's enemies and projectiles.
   if(bulletState.phasePending){advanceBulletIfReady();placeFood();}
+  if(paused || over)return;
   for(const enemy of [...bulletState.enemies]){
     if(!bulletState.enemies.includes(enemy))continue;
     if(same(enemy,snake[0]) && !resolveEnemyContact(enemy)){endGame();return;}
@@ -149,7 +152,10 @@ function updateBulletMode(){
     for(let i=regular;i<bulletState.profile.count;i++)createBulletEnemy(i);
     bulletState.nextRespawn=gameTime+6500;
   }
-  if(gameTime>=bulletState.nextCannon && bulletState.hazards.length<bulletState.profile.maxCannons){spawnCannonShadow();bulletState.nextCannon=gameTime+bulletState.profile.cannonDelay;}
+  if(gameTime>=bulletState.nextCannon){
+    for(let i=0;i<bulletState.profile.cannonBatch && bulletState.hazards.length<bulletState.profile.maxCannons;i++)spawnCannonShadow();
+    bulletState.nextCannon=gameTime+bulletState.profile.cannonDelay;
+  }
   for(const hazard of bulletState.hazards){
     if(gameTime>=hazard.fireAt){emitFourShots(hazard,'cannon',hazard.barrage?.65:1);hazard.stage='spent';playEffect('cannonBurst');}
     else if(gameTime>=hazard.impactAt)hazard.stage='bomb';
@@ -168,6 +174,7 @@ function updateShotList(shots){
   for(const shot of shots){
     if(shot.dead)continue;
     const dt=Math.max(0,(gameTime-shot.lastAt)/1000);shot.lastAt=gameTime;
+    if(shot.owner==='green' && bulletState.upgrade==='homing')steerBulletHoming(shot,dt);
     shot.px=shot.x;shot.py=shot.y;shot.x+=shot.dx*shot.speed*dt;shot.y+=shot.dy*shot.speed*dt;
     if(gameTime>=shot.until){shot.dead=true;continue;}
     const a={x:shot.px,y:shot.py},b=shot;
@@ -226,8 +233,8 @@ function updateBulletHud(){
   shieldBar.value=shield;shieldBar.setAttribute('aria-label',`Escudo: ${shield} de 3 hambúrgueres`);
   const notice=document.getElementById('bulletNotice');
   if(notice){
-    notice.hidden=bulletState.noticeUntil<=gameTime;
-    notice.textContent=bulletState.bossDefeated && bulletState.phase===12?'Holandês desbloqueado! O desafio infinito começou.':bulletState.phase===11?'O Holandês Voador chegou! Derrote o chefe.':`Fase ${bulletState.phase} · ${goal} hambúrgueres verdes para avançar`;
+    notice.hidden=bulletState.noticeUntil<=gameTime && bulletState.reviveNoticeUntil<=gameTime;
+    notice.textContent=bulletState.reviveNoticeUntil>gameTime?'Salva-vidas! Você voltou com 5s de imunidade.':bulletState.bossDefeated && bulletState.phase===12?'Holandês desbloqueado! O desafio infinito começou.':bulletState.phase===11?'O Holandês Voador chegou! Derrote o chefe.':`Fase ${bulletState.phase} · ${goal} hambúrgueres verdes para avançar`;
   }
 }
 function drawDutchSprite(x,y,head=true){
@@ -301,4 +308,61 @@ function reflowBulletWorld(){
     if(bulletState.bonusFoods.length){bulletState.bonusFoods=[];if(character==='bob')abilityReadyAt=gameTime;}
     updateBulletHud();
   }
+}
+
+
+function steerBulletHoming(shot,dt){
+  const targets=bulletState.enemies.filter(e=>e.kind!=='dutch' && !shot.hitEnemies?.has(e))
+    .map(enemy=>({enemy,distance:Math.hypot(enemy.x-shot.x,enemy.y-shot.y)}))
+    .filter(t=>t.distance<=6).sort((a,b)=>a.distance-b.distance);
+  if(!targets.length)return;
+  const target=targets[0].enemy,angle=Math.atan2(shot.dy,shot.dx),desired=Math.atan2(target.y-shot.y,target.x-shot.x);
+  const delta=Math.atan2(Math.sin(desired-angle),Math.cos(desired-angle));
+  const turned=angle+Math.max(-3.8*dt,Math.min(3.8*dt,delta));
+  shot.dx=Math.cos(turned);shot.dy=Math.sin(turned);
+}
+function tryBulletRevive(){
+  if(bulletState.reviveUntil>gameTime)return true;
+  if(bulletState.reviveCharges<1 || paused)return false;
+  bulletState.reviveCharges--;
+  bulletState.reviveUntil=gameTime+5000;bulletState.reviveNoticeUntil=gameTime+3000;
+  powers.immunity=bulletState.reviveUntil;
+  bulletState.shots=bulletState.shots.filter(s=>s.owner==='green');bulletState.hazards=[];
+  snake=snake.slice(0,INITIAL_SNAKE_LENGTH);previousSnake=snake.map(p=>({...p}));lastVisualPositions=[];
+  clearPadPointer();clearCanvasDrag();resetMobileInput();
+  playEffect('super');updateStatus();draw();return true;
+}
+const bulletUpgradeChoices=[
+  {id:'frost',name:'Frio que queima',image:'assets/upgrade-frost.svg',text:'O sopro passa a dar 3 de dano no primeiro inimigo e 2 de dano nos de trás.'},
+  {id:'homing',name:'Hambúrguer teleguiado',image:'assets/upgrade-homing.svg',text:'Os tiros do hambúrguer verde perseguem o Plankton mais próximo.'},
+  {id:'revive',name:'Salva-vidas',image:'assets/upgrade-revive.svg',text:'Ressuscita 1 vez caso você perca toda a vida. Ao voltar, você fica imune por 5 segundos.'}
+];
+const bulletUpgradeDialog=document.createElement('div');
+bulletUpgradeDialog.id='bulletUpgradeDialog';bulletUpgradeDialog.hidden=true;
+bulletUpgradeDialog.setAttribute('role','dialog');bulletUpgradeDialog.setAttribute('aria-modal','true');bulletUpgradeDialog.setAttribute('aria-labelledby','bulletUpgradeTitle');
+bulletUpgradeDialog.innerHTML=`<section class="upgrade-panel"><span class="upgrade-level">Fase 5</span><h2 id="bulletUpgradeTitle">Escolha seu upgrade</h2><p>Um poder extra para o resto da aventura. Escolha um!</p><div class="upgrade-options">${bulletUpgradeChoices.map(c=>`<button type="button" class="upgrade-card" data-upgrade="${c.id}"><img src="${c.image}" alt="" width="240" height="130"><strong>${c.name}</strong><span>${c.text}</span></button>`).join('')}</div><small>A partida continua assim que você escolher.</small></section>`;
+game.append(bulletUpgradeDialog);
+bulletUpgradeDialog.querySelectorAll('[data-upgrade]').forEach(button=>button.addEventListener('click',()=>chooseBulletUpgrade(button.dataset.upgrade)));
+bulletUpgradeDialog.addEventListener('keydown',event=>{
+  if(event.key!=='Tab')return;
+  const buttons=[...bulletUpgradeDialog.querySelectorAll('button')],index=buttons.indexOf(document.activeElement);
+  event.preventDefault();buttons[(index+(event.shiftKey?-1:1)+buttons.length)%buttons.length].focus();
+});
+function closeBulletUpgrade(){
+  bulletUpgradeDialog.hidden=true;
+}
+function showBulletUpgrade(){
+  if(bulletState.upgrade || bulletState.upgradePending)return;
+  if(!paused)togglePause();
+  bulletState.upgradePending=true;
+  overlay.classList.add('hidden');bulletUpgradeDialog.hidden=false;
+  bulletUpgradeDialog.querySelector('button').focus();
+}
+function chooseBulletUpgrade(id){
+  if(!bulletState.upgradePending || !bulletUpgradeChoices.some(c=>c.id===id))return false;
+  bulletState.upgrade=id;bulletState.reviveCharges=id==='revive'?1:0;
+  bulletState.upgradePending=false;closeBulletUpgrade();
+  if(paused)togglePause();
+  document.getElementById('topPauseBtn').focus({preventScroll:true});
+  playEffect('karateReady');return true;
 }

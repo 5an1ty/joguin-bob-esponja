@@ -18,6 +18,7 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           const classicBest=best,battleRecord=battleBest;let nextColor='green';
           for(let phase=1;phase<=10;phase++){
+            if(bulletState.upgradePending){chooseBulletUpgrade('frost');clearTimeout(timer);}
             assert(bulletState.phase===phase,'phase '+phase);
             const expected=phase<=4?5:phase<=7?8:10;
             assert(bulletGoal(phase)===expected,'quota '+phase);
@@ -290,6 +291,7 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           for(const phase of [1,4,5,7,8,10,11,12]){
             beginBulletPhase(phase);placeFood();
+            if(bulletState.upgradePending){chooseBulletUpgrade('frost');clearTimeout(timer);}
             assert(food.type===chooseFoodType() && (phase===1?food.type==='green':['green','red'].includes(food.type)),'main food follows phase rules '+phase);
             for(const type of ['normal','red','super']){
               food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;collectFood();

@@ -70,3 +70,6 @@ body:after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;back
 @media(prefers-reduced-motion:reduce){.upgrade-card.mythic-card{animation:none;border-color:#cd70ff}}
 
 .upgrade-card .upgrade-hint{font-size:11px;line-height:1.35;color:#5e4979;margin:8px 12px 0}.mythic-card .upgrade-hint{color:#602990;font-weight:800}
+
+#bulletBossDecision[hidden]{display:none!important}#bulletBossDecision{position:fixed;inset:0;z-index:61;display:grid;place-items:center;padding:16px;background:#032c4dd9;backdrop-filter:blur(7px);overflow:auto}.boss-decision-panel{width:min(550px,100%);padding:26px}.boss-decision-panel>img{display:block;margin:0 auto 12px;filter:drop-shadow(0 5px 10px #37aa8d55)}.boss-decision-actions{display:grid;gap:12px;margin-top:20px}.boss-decision-actions button{min-height:50px}.boss-decision-actions .secondary{background:#d8f4f0;color:#0a5366;box-shadow:0 3px 0 #9ccfc9}.boss-decision-actions button:focus-visible{outline:3px solid #047c9c;outline-offset:4px}#game:has(#bulletBossDecision:not([hidden])) #bulletNotice{display:none}
+@media(max-height:500px) and (orientation:landscape){.boss-decision-panel{padding:16px}.boss-decision-panel>img{width:68px;height:68px;margin-bottom:5px}.boss-decision-actions{grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.boss-decision-panel h2{font-size:23px}}

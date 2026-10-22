@@ -1,9 +1,9 @@
 // Bullet Hell: clocks use gameTime so pause freezes hazards, warnings and shots.
-const bulletState={upgrades:[],upgradePhases:[],offeredUpgrades:[],mythicCharges:0,upgradePending:false,reviveCharges:0,reviveUntil:0,reviveNoticeUntil:0,phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
+const bulletState={resumeRamp:null,rampPauseAt:null,bossDecisionPending:false,infinite:false,infiniteStartedAt:0,victoryComplete:false,upgrades:[],upgradePhases:[],offeredUpgrades:[],mythicCharges:0,upgradePending:false,reviveCharges:0,reviveUntil:0,reviveNoticeUntil:0,phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
 let dutchUnlocked=localStorage.getItem('bobSnakeDutchUnlocked')==='true';
 let dutchProjectiles=[];
 const DUTCH_BOSS_HEALTH=10;
-function bulletGoal(phase){return phase<=4?5:phase<=7?8:10;}
+function bulletGoal(phase){return phase<=10?5:10;}
 function bulletProfile(phase){
   const level=phase===11?10:phase;
   const scale=Math.pow(.94,level-1);
@@ -21,6 +21,7 @@ function updateBulletRecord(){
   updateBestDisplay();
 }
 function startBulletMode(){
+  closeBulletBossDecision();bulletState.resumeRamp=null;bulletState.rampPauseAt=null;bulletState.bossDecisionPending=false;bulletState.infinite=false;bulletState.infiniteStartedAt=0;bulletState.victoryComplete=false;
   closeBulletUpgrade();bulletState.upgrades=[];bulletState.upgradePhases=[];bulletState.offeredUpgrades=[];bulletState.mythicCharges=0;bulletState.upgradePending=false;bulletState.reviveCharges=0;bulletState.reviveUntil=0;bulletState.reviveNoticeUntil=0;
   bulletState.phase=1;bulletState.progress=0;bulletState.immunityCount=0;bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];bulletState.phasePending=false;bulletState.bossDefeated=false;
   beginBulletPhase(1);
@@ -50,7 +51,7 @@ function beginBulletPhase(phase){
   generateObstacles(bulletState.profile.obstacles);
   for(let i=0;i<bulletState.profile.count;i++)createBulletEnemy(i);
   if(phase===11)createBulletEnemy(0,'dutch');
-  sceneCacheKey='';refreshSpeed();
+  sceneCacheKey='';updateBulletInfinitePressure();refreshSpeed();
   if([3,6,9].includes(phase) && !bulletState.upgradePhases.includes(phase))showBulletUpgrade();
 }
 function chooseBulletFood(){return bulletState.nextFood;}
@@ -79,7 +80,7 @@ function collectBulletFood(){
   return bonus && !advanced ? true : placeFood();
 }
 function advanceBulletIfReady(){
-  if(!bulletState.phasePending)return false;
+  if(!bulletState.phasePending || bulletState.bossDecisionPending)return false;
   beginBulletPhase(bulletState.phase+1);return true;
 }
 function damageBulletEnemy(enemy,damage,stun=3000,source='normal'){
@@ -97,9 +98,9 @@ function damageBulletEnemy(enemy,damage,stun=3000,source='normal'){
   addScore(enemy.kind==='dutch'?500:50);
   if(enemy.kind==='dutch'){
     dutchUnlocked=true;localStorage.setItem('bobSnakeDutchUnlocked','true');updateDutchChoice();
-    bulletState.bossDefeated=true;bulletState.phasePending=true;
+    bulletState.bossDefeated=true;bulletState.phasePending=false;
     bulletState.noticeUntil=gameTime+4000;
-    // Phase 11 is won by defeating the boss; no green-food quota is required.
+    showBulletBossDecision();
   }
 }
 function emitFourShots(origin,owner,speedScale=1){
@@ -122,6 +123,7 @@ function updateBulletMode(){
   if(bulletState.phasePending){advanceBulletIfReady();placeFood();}
   if(paused || over)return;
   for(const enemy of [...bulletState.enemies]){
+    if(paused || over)return;
     if(!bulletState.enemies.includes(enemy))continue;
     if(same(enemy,snake[0]) && !resolveEnemyContact(enemy)){endGame();return;}
     if(!bulletState.enemies.includes(enemy))continue;
@@ -138,15 +140,17 @@ function updateBulletMode(){
     if(enemy.stunnedUntil>gameTime || enemy.frozenUntil>gameTime)continue;
     const from={x:enemy.x,y:enemy.y};let moved=false;
     for(let i=0;i<4 && gameTime>=enemy.nextMoveAt;i++){
+      if(paused || over)return;
       const moves=steps.map(d=>wrap({x:enemy.x+d.x,y:enemy.y+d.y})).filter(p=>!bulletState.enemies.some(other=>other!==enemy && same(p,other)));
       moves.sort((a,b)=>torusDistance(a,snake[0])-torusDistance(b,snake[0]));
       if(moves.length){Object.assign(enemy,moves[0]);moved=true;}
       enemy.nextMoveAt+=enemyInterval(enemy);
       const bomb=obstacles.find(o=>o.bomb && same(o,enemy));if(bomb)explodeBomb(bomb);
+      if(paused || over)return;
       if(!bulletState.enemies.includes(enemy))break;
       if(same(enemy,snake[0]) && !resolveEnemyContact(enemy)){endGame();return;}
     }
-    if(moved)enemy.motion={from,startedAt:performance.now(),duration:Math.min(currentSpeed,enemyInterval(enemy))};
+    if(moved)enemy.motion={from,startedAt:gameplayNow(),duration:Math.min(currentSpeed,enemyInterval(enemy))};
   }
   if(gameTime>=bulletState.nextRespawn){
     const regular=bulletState.enemies.filter(e=>e.kind!=='dutch').length;
@@ -173,6 +177,7 @@ function segmentDistance(point,a,b){
 }
 function updateShotList(shots){
   for(const shot of shots){
+    if(paused || over)break;
     if(shot.dead)continue;
     const dt=Math.max(0,(gameTime-shot.lastAt)/1000);shot.lastAt=gameTime;
     if(shot.owner==='green' && hasBulletUpgrade('homing'))steerBulletHoming(shot,dt);
@@ -269,7 +274,7 @@ function drawDutchEnemy(enemy,now){
     ctx.restore();
   });
 }
-function drawBulletWorld(alpha=1,now=performance.now()){
+function drawBulletWorld(alpha=1,now=gameplayNow()){
   if(gameMode==='bullet'){
     if(hasPower('immunity') && snake.length){
       const head=getVisualHead(alpha,now);
@@ -345,7 +350,7 @@ const bulletUpgradeChoices=[
 const bulletUpgradeDialog=document.createElement('div');
 bulletUpgradeDialog.id='bulletUpgradeDialog';bulletUpgradeDialog.hidden=true;
 bulletUpgradeDialog.setAttribute('role','dialog');bulletUpgradeDialog.setAttribute('aria-modal','true');bulletUpgradeDialog.setAttribute('aria-labelledby','bulletUpgradeTitle');
-bulletUpgradeDialog.innerHTML='<section class="upgrade-panel"><span class="upgrade-level"></span><h2 id="bulletUpgradeTitle">Escolha seu upgrade</h2><p>Os poderes escolhidos se acumulam nesta aventura!</p><div class="upgrade-options"></div><small>A partida continua assim que você escolher.</small></section>';
+bulletUpgradeDialog.innerHTML='<section class="upgrade-panel"><span class="upgrade-level"></span><h2 id="bulletUpgradeTitle">Escolha seu upgrade</h2><p>Os poderes escolhidos se acumulam nesta aventura!</p><div class="upgrade-options"></div><small>Após escolher, o ritmo volta aos poucos em 4 segundos.</small></section>';
 game.append(bulletUpgradeDialog);
 bulletUpgradeDialog.addEventListener('click',event=>{
   const button=event.target.closest('[data-upgrade]');
@@ -378,6 +383,7 @@ function chooseBulletUpgrade(id){
   if(id==='mythic')bulletState.mythicCharges=1;
   bulletState.upgradePending=false;closeBulletUpgrade();
   if(paused)togglePause();
+  startBulletResumeRamp();
   document.getElementById('topPauseBtn').focus({preventScroll:true});
   updateStatus();playEffect('karateReady');return true;
 }
@@ -444,3 +450,80 @@ function useBulletMythic(){
 document.addEventListener('keydown',event=>{
   if(event.key.toLowerCase()==='v' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey){event.preventDefault();useBulletMythic();}
 });
+
+
+// A virtual clock applies the same 0→100% ramp to simulation and interpolation.
+function getBulletClock(real=performance.now()){
+  const ramp=bulletState.resumeRamp;
+  if(!ramp)return real;
+  const elapsed=Math.max(0,real-ramp.startedAt);
+  return ramp.virtualStart+(elapsed<=4000?elapsed*elapsed/8000:elapsed-2000);
+}
+function bulletResumeScale(real=performance.now()){
+  return bulletState.resumeRamp?Math.min(1,Math.max(0,(real-bulletState.resumeRamp.startedAt)/4000)):1;
+}
+function bulletRealDelay(virtualDelay,real=performance.now()){
+  const ramp=bulletState.resumeRamp;
+  if(!ramp || real-ramp.startedAt>=4000)return virtualDelay;
+  const target=getBulletClock(real)+virtualDelay-ramp.virtualStart;
+  const targetElapsed=target<=2000?Math.sqrt(Math.max(0,target)*8000):target+2000;
+  return Math.max(1,ramp.startedAt+targetElapsed-real);
+}
+function startBulletResumeRamp(real=performance.now()){
+  const virtualStart=getBulletClock(real);
+  bulletState.resumeRamp={startedAt:real,virtualStart};bulletState.rampPauseAt=null;
+  clearTimeout(timer);scheduleTick();
+}
+function pauseBulletRamp(real=performance.now()){
+  bulletState.rampPauseAt=bulletState.resumeRamp?real:null;
+}
+function resumeBulletRamp(real=performance.now()){
+  if(bulletState.resumeRamp && bulletState.rampPauseAt!==null){
+    const elapsed=real-bulletState.rampPauseAt;
+    bulletState.resumeRamp.startedAt+=elapsed;bulletState.resumeRamp.virtualStart+=elapsed;
+  }
+  bulletState.rampPauseAt=null;
+}
+function updateBulletInfinitePressure(){
+  if(!bulletState.infinite)return;
+  const elapsed=Math.max(0,(gameTime-bulletState.infiniteStartedAt)/1000),pressure=1+elapsed/60;
+  const base=bulletProfile(bulletState.phase);
+  bulletState.profile={...base,snakeSpeed:Math.max(30,base.snakeSpeed/pressure),enemyInterval:Math.max(70,base.enemyInterval/pressure),shotSpeed:Math.min(26,base.shotSpeed*pressure),cannonDelay:Math.max(220,base.cannonDelay/pressure),maxCannons:Math.min(30,base.maxCannons+Math.floor(elapsed/30)),cannonBatch:Math.min(8,base.cannonBatch+Math.floor(elapsed/60))};
+}
+const bulletBossDecision=document.createElement('div');bulletBossDecision.id='bulletBossDecision';bulletBossDecision.hidden=true;
+bulletBossDecision.setAttribute('role','dialog');bulletBossDecision.setAttribute('aria-modal','true');bulletBossDecision.setAttribute('aria-labelledby','bulletBossDecisionTitle');
+bulletBossDecision.innerHTML='<section class="upgrade-panel boss-decision-panel"><img src="assets/dutch.svg" width="100" height="100" alt="Holandês Voador"><h2 id="bulletBossDecisionTitle">Você derrotou o Holandês!</h2><p>Personagem desbloqueado! Quer continuar a aventura?</p><div class="boss-decision-actions"><button id="bulletInfiniteBtn" class="primary" type="button">Continuar no infinito</button><button id="bulletFinishBtn" class="secondary" type="button">Encerrar com vitória</button></div><small>No infinito, a velocidade e os canhões aumentam com o tempo.</small></section>';
+game.append(bulletBossDecision);
+document.getElementById('bulletInfiniteBtn').addEventListener('click',()=>chooseBulletBossOutcome('continue'));
+document.getElementById('bulletFinishBtn').addEventListener('click',()=>chooseBulletBossOutcome('finish'));
+bulletBossDecision.addEventListener('keydown',event=>{
+  if(event.key!=='Tab')return;
+  const buttons=[...bulletBossDecision.querySelectorAll('button')],index=buttons.indexOf(document.activeElement);
+  event.preventDefault();buttons[(index+(event.shiftKey?-1:1)+buttons.length)%buttons.length].focus();
+});
+function closeBulletBossDecision(){bulletBossDecision.hidden=true;}
+function showBulletBossDecision(){
+  if(bulletState.bossDecisionPending || bulletState.victoryComplete)return;
+  bulletState.bossDecisionPending=true;
+  if(!paused)togglePause({forBoss:true});
+  overlay.classList.add('hidden');bulletBossDecision.hidden=false;
+  document.getElementById('bulletInfiniteBtn').focus();
+}
+function chooseBulletBossOutcome(choice){
+  if(!bulletState.bossDecisionPending || !['continue','finish'].includes(choice))return false;
+  bulletState.bossDecisionPending=false;closeBulletBossDecision();
+  if(choice==='continue'){
+    bulletState.infinite=true;bulletState.infiniteStartedAt=gameTime;
+    beginBulletPhase(12);placeFood();
+    if(paused)togglePause();updateStatus();
+    document.getElementById('topPauseBtn').focus({preventScroll:true});return true;
+  }
+  bulletState.victoryComplete=true;over=true;paused=false;
+  clearTimeout(timer);stopMovementGuide();stopEffects();clearPadPointer();clearCanvasDrag();resetMobileInput();
+  overlay.classList.remove('hidden');document.getElementById('overlayIcon').textContent='🏆';
+  document.getElementById('overlayTitle').textContent='Vitória na Fenda do Biquíni!';
+  document.getElementById('overlayText').textContent=`Você derrotou o Holandês Voador! ${score} pontos. Recompensa: Holandês Voador desbloqueado para jogar.`;
+  document.getElementById('resumeBtn').classList.add('hidden');document.getElementById('overlayRestartBtn').textContent='JOGAR NOVAMENTE';
+  syncMobileControls();updateMythicButton();tocarMusica();playEffect('super');draw();
+  document.getElementById('overlayRestartBtn').focus({preventScroll:true});return true;
+}

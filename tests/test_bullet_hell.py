@@ -20,7 +20,7 @@ class BulletHellTests(unittest.TestCase):
           for(let phase=1;phase<=10;phase++){
             if(bulletState.upgradePending){chooseBulletUpgrade(bulletState.offeredUpgrades[0]);clearTimeout(timer);}
             assert(bulletState.phase===phase,'phase '+phase);
-            const expected=phase<=4?5:phase<=7?8:10;
+            const expected=5;
             assert(bulletGoal(phase)===expected,'quota '+phase);
             assert(obstacles.length>0,'scenario obstacles from phase 1');
             if(phase>=3)assert(obstacles.length>0,'more rocks from 3');
@@ -150,7 +150,8 @@ class BulletHellTests(unittest.TestCase):
           assert(bulletState.progress===0,'no green quota collected');
           damageBulletEnemy(boss,DUTCH_BOSS_HEALTH,0);
           assert(dutchUnlocked && localStorage.getItem('bobSnakeDutchUnlocked')==='true','unlock stored');
-          updateBulletMode();assert(bulletState.phase===12 && food.type==='green','infinite starts after boss alone');
+          assert(paused && bulletState.bossDecisionPending,'boss death waits for decision');
+          chooseBulletBossOutcome('continue');clearTimeout(timer);updateBulletMode();assert(bulletState.phase===12 && food.type==='green','infinite starts after choosing continue');
           assert(selectedMusicKey()==='bgm_bullet_mode','normal music in infinite');
         """)
         self.page.reload(wait_until='domcontentloaded')
@@ -351,7 +352,7 @@ class BulletHellTests(unittest.TestCase):
           food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();
           assert(food.type==='red','green is followed by red');
           const boss=bulletState.enemies.find(e=>e.kind==='dutch');
-          damageBulletEnemy(boss,DUTCH_BOSS_HEALTH,0);updateBulletMode();
+          damageBulletEnemy(boss,DUTCH_BOSS_HEALTH,0);chooseBulletBossOutcome('continue');clearTimeout(timer);updateBulletMode();
           assert(bulletState.phase===12 && food.type==='red','boss victory cannot reset pending color to green');
         """)
 

@@ -438,15 +438,19 @@ const foodDescriptions = {
 
 function hasPower(type) { return (powers[type] || 0) > gameTime; }
 
+function gameplayNow(real=performance.now()){
+  return gameMode==='bullet' && typeof getBulletClock==='function'?getBulletClock(real):real;
+}
+
 // Um único timer; a pausa também suspende as atualizações da simulação.
-function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMoveAt))) {
+function scheduleTick(delay = Math.max(1,currentSpeed-(gameplayNow()-lastMoveAt))) {
   clearTimeout(timer);
   if (paused || over || !menu.classList.contains('hidden')) return;
   timer = setTimeout(() => {
     const deadline = lastMoveAt + motionDuration;
-    if (performance.now()+.5 >= deadline) tick(deadline);
+    if (gameplayNow()+.5 >= deadline) tick(deadline);
     scheduleTick();
-  }, Math.max(1, delay));
+  }, Math.max(1,gameMode==='bullet'?bulletRealDelay(delay):delay));
 }
 
 function refreshSpeed() {
@@ -885,6 +889,7 @@ const musicas={easy:musicTracks.bgm_easy_explore,medium:musicTracks.bgm_hard_exp
 function allMusicTracks() {return [...new Set([...Object.values(musicas),...Object.values(musicTracks)])];}
 function selectedMusicKey() {
   if(!menu.classList.contains('hidden') || (paused && !(gameMode==='bullet' && bulletState.upgradePending)))return 'bgm_menu_mode';
+  if(gameMode==='bullet' && bulletState.victoryComplete)return 'bgm_menu_mode';
   if(gameMode==='bullet')return bulletState.phase===11?'bgm_bullet_boss':'bgm_bullet_mode';
   if(gameMode==='battle') return 'bgm_battle_mode';
   return `bgm_${difficulty==='easy'?'easy':'hard'}_${activeEnemies().length?'boss':'explore'}`;
@@ -1150,7 +1155,7 @@ function restartImmediately() {
 
 function startGame(options={}) {
   if(!options.skipTutorial && !playableTutorial && (tutorialSelected || (gameMode==='battle' && localStorage.getItem('bobSnakeBattlePlayableTutorialSeen')!=='true'))) {beginPlayableTutorial();return;}
-  if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();bulletState.upgradePending=false;}
+  if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();closeBulletBossDecision();bulletState.upgradePending=false;bulletState.bossDecisionPending=false;}
   stopMovementGuide();
   stopEffects();
   pararMusica();
@@ -1246,7 +1251,7 @@ function startGame(options={}) {
 
   previousSnake = snake.map(p => ({...p}));
   previousFood = food && {...food};
-  lastMoveAt = performance.now();
+  lastMoveAt = gameplayNow();
   inputMotion = null;
   motionDuration = currentSpeed;
   updateBestDisplay();
@@ -1452,7 +1457,7 @@ function tryPlaceSafeFood() {
 // ATUALIZAR MOVIMENTAÇÃO DA COBRA
 // =====================================
 
-function tick(stepAt = performance.now()) {
+function tick(stepAt = gameplayNow()) {
   if (paused || over) return;
   previousSnake = snake.map(p => ({...p}));
   previousFood = food && {...food};
@@ -1460,6 +1465,7 @@ function tick(stepAt = performance.now()) {
   inputMotion = null;
   motionDuration = currentSpeed;
   gameTime += currentSpeed;
+  if(gameMode==='bullet')updateBulletInfinitePressure();
   refreshSpeed();
   direction = directionQueue.shift() || nextDirection;
   nextDirection = directionQueue[0] || direction;
@@ -1546,7 +1552,7 @@ function setDirection(dir) {
     if (directionQueue.length===2 && same(d,directionQueue[1])) return;
     queued = [first,d]; // O comando lateral mais recente substitui o futuro obsoleto.
   }
-  const now = performance.now();
+  const now = gameplayNow();
   const changed = !first || !same(first,queued[0]);
   const from = changed ? getVisualHead(movementProgress(now),now) : null;
   directionQueue = queued;
@@ -1673,14 +1679,17 @@ window.addEventListener('blur', () => clearPadPointer());
 // =====================================
 
 function togglePause(options={}) {
-  if(gameMode==='bullet' && bulletState.upgradePending && !options.forUpgrade)return;
+  if(gameMode==='bullet' && (bulletState.upgradePending && !options.forUpgrade || bulletState.bossDecisionPending && !options.forBoss))return;
   if(typeof joystickEditor!=='undefined' && joystickEditor){finishJoystickEdit(false);return;}
   orientationResumePending=false;
   if(playableTutorial?.explained && paused && !playableTutorial.advancing)return;
   if (over) return;
 
-  const now = performance.now();
+  const real=performance.now();
+  if(gameMode==='bullet' && paused)resumeBulletRamp(real);
+  const now = gameplayNow(real);
   if (!paused) {
+    if(gameMode==='bullet')pauseBulletRamp(real);
     pausedProgress = movementProgress(now);
     lastVisualPositions = visualSnakePositions(pausedProgress, now);
     pauseStartedAt = now;
@@ -1771,7 +1780,7 @@ function endGame() {
 // =====================================
 
 function goMenu() {
-  if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();bulletState.upgradePending=false;}
+  if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();closeBulletBossDecision();bulletState.upgradePending=false;bulletState.bossDecisionPending=false;}
   abortPlayableTutorial();
   stopMovementGuide();
   clearCanvasDrag();
@@ -1857,12 +1866,12 @@ function applyCharacterEffect() {
   if(hasPower('super')) {ctx.shadowColor = '#ffe45c';ctx.shadowBlur = 12;}
 }
 
-function movementProgress(now = performance.now()) {
+function movementProgress(now = gameplayNow()) {
   return Math.min(1,Math.max(0,(now-lastMoveAt)/motionDuration));
 }
 
 // Desenha o passo em andamento, em vez de ficar uma célula atrás da simulação.
-function getVisualHead(alpha = movementProgress(), now = performance.now()) {
+function getVisualHead(alpha = movementProgress(), now = gameplayNow()) {
   if (!snake.length) return null;
   if ((paused || over) && lastVisualPositions.length) return lastVisualPositions[0];
   const next = directionQueue[0] || nextDirection;
@@ -1888,8 +1897,8 @@ function startAnimation() {
     wasPaused = paused;
     updateMovementGuide(now);
     updateTutorialSlowdown(now);
-    const alpha = movementProgress(now);
-    draw(alpha,now);
+    const time=gameplayNow(now),alpha = movementProgress(time);
+    draw(alpha,time);
     if(!over) animationFrame = requestAnimationFrame(render);
   };
   animationFrame = requestAnimationFrame(render);
@@ -1982,7 +1991,7 @@ function paintSnakeSprite(x,y,index) {
   ctx.drawImage(sprite,x-padding,y-padding,sprite.width/scaleX,sprite.height/scaleY);
 }
 
-function draw(alpha = movementProgress(), now = performance.now()) {
+function draw(alpha = movementProgress(), now = gameplayNow()) {
   paintCachedScene();
 
   // Bolhas no fundo
@@ -2167,7 +2176,7 @@ function drawHouse(x,y,kind) {
   ctx.restore();
 }
 
-function getEyeOrigins(alpha = movementProgress(), now = performance.now()) {
+function getEyeOrigins(alpha = movementProgress(), now = gameplayNow()) {
   if (!snake.length) return [];
   const head = getVisualHead(alpha,now);
   const eyes = character === 'bob' ? [{x:7.5,y:7},{x:13.5,y:7}] : [{x:8,y:9},{x:12,y:9}];
@@ -2177,7 +2186,7 @@ function getEyeOrigins(alpha = movementProgress(), now = performance.now()) {
   }));
 }
 
-function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
+function drawEyeLaser(alpha = movementProgress(), now = gameplayNow()) {
   if (!beam || beam.until <= gameTime) return;
   const target = {x:beam.to.x*CELL+10,y:beam.to.y*CELL+10};
   ctx.save();ctx.lineCap='round';ctx.shadowColor='#ff334e';ctx.shadowBlur=8;
@@ -2190,7 +2199,7 @@ function drawEyeLaser(alpha = movementProgress(), now = performance.now()) {
   ctx.restore();
 }
 
-function drawOrbitingGlove(alpha,now=performance.now()) {
+function drawOrbitingGlove(alpha,now=gameplayNow()) {
   if(!isCombatMode() || character!=='sandy' || !karateArmed) return;
   const head=getVisualHead(alpha,now);
   const visualTime=gameTime+(!paused && !over?alpha*motionDuration:0);
@@ -2270,7 +2279,7 @@ function drawFrostBreath(alpha) {
   }
 }
 
-function drawPlankton(now = performance.now()) {
+function drawPlankton(now = gameplayNow()) {
   for(const enemy of activeEnemies()) drawEnemy(enemy,now);
 }
 

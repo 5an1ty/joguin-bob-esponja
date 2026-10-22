@@ -109,7 +109,7 @@ Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo men
 
 ## Bullet Hell e Holandês Voador
 
-`test_bullet_hell.py` cobre metas por fase (5/8/10), velocidade alterada apenas na transição, escudo de 3 segundos a cada 3 lanches, reset do contador, composição de inimigos, sombras/impacto/quatro estilhaços, dano de verdes em Plankton/chefe, aviso sonoro antes do tiro, alternância estrita verde/vermelho desde a fase 1, preservada entre fases, na luta contra o chefe e no infinito, com bônus amarelos separados, desbloqueio persistente e fase infinita. A fase 11 é vencida exclusivamente ao derrotar o chefe, sem cota de verdes. A partir da fase 12, 10 verdes avançam cada fase infinita.
+`test_bullet_hell.py` cobre meta de 5 verdes nas fases 1–10 e 10 no infinito, velocidade alterada apenas na transição, escudo de 3 segundos a cada 3 lanches, reset do contador, composição de inimigos, sombras/impacto/quatro estilhaços, dano de verdes em Plankton/chefe, aviso sonoro antes do tiro, alternância estrita verde/vermelho desde a fase 1, preservada entre fases, na luta contra o chefe e no infinito, com bônus amarelos separados, desbloqueio persistente e fase infinita. A fase 11 é vencida exclusivamente ao derrotar o chefe, sem cota de verdes. A partir da fase 12, 10 verdes avançam cada fase infinita.
 
 Os projéteis verdes saem nas quatro direções **ao coletar** o hambúrguer. O lanche amarelo da habilidade do Bob é um bônus separado, preservando a sequência principal; ele concede imunidade e turbo simultâneos por 6 segundos, sem contar para avançar a fase. A rotação limpa tiros e sombras em trânsito para evitar colisões causadas pela mudança da grade, preservando fase, pontuação e inimigos. Um bônus amarelo ainda não coletado é removido com devolução da recarga.
 
@@ -122,3 +122,5 @@ No Bullet Hell, obstáculos aparecem desde a fase 1. O sopro causa 2 de dano ape
 `test_bullet_upgrade_pool.py` cobre as escolhas acumuladas nas fases 3/6/9, o retorno dos recusados, exclusão dos adquiridos mesmo após consumo, os limites exatos de probabilidade mítica (100 em 1000 amostras por sorteio), o laser vermelho perfurante, a intangibilidade por 4s e precedência sobre Salva-vidas, a ativação por V e toque, os danos/obstáculos da saraivada e o card mítico animado.
 
 `test_music_navigation.py` valida a trilha do menu na pausa e navegação, posição preservada ao continuar, ausência de pausa/reinício nas três escolhas de cartas, preferências de silêncio, interação inicial do menu e decodificação do MP3 `bgm_menu_mode`.
+
+`test_bullet_resume_victory.py` valida a integral e a inversão do relógio da retomada de 4s, execução de timers com relógio controlado para jogador/inimigos/tiros, pausa e reinício da curva, acionamento em cada card, decisão obrigatória pós-chefe, infinito com pressão contínua sem comida, vitória sem consumir defesas e popup mobile com foco por teclado.

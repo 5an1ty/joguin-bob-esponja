@@ -20,3 +20,12 @@
   new MutationObserver(refreshHero).observe(document.querySelector('.character-options'), {subtree:true, attributes:true, attributeFilter:['class']});
   refreshHero();
 })();
+
+// Retrato da partida acompanha a seleção, sem alterar os controles do jogo.
+const playingAvatar=document.getElementById('playingAvatar');
+function syncPlayingAvatar(){
+  const selected=document.querySelector('.character.selected');
+  if(selected)playingAvatar.src='assets/'+selected.dataset.character+'.svg';
+}
+document.querySelector('.character-options').addEventListener('click',syncPlayingAvatar);
+syncPlayingAvatar();

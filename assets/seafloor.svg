@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1280" preserveAspectRatio="xMidYMax slice">
+<defs><linearGradient id="sea" x2="0" y2="1"><stop stop-color="#19d4db"/><stop offset=".7" stop-color="#087cb3"/><stop offset="1" stop-color="#07578d"/></linearGradient><pattern id="sand" width="32" height="30" patternUnits="userSpaceOnUse"><circle cx="10" cy="8" r="1.5" fill="#deb95e"/><circle cx="25" cy="25" r="1" fill="#78bba5"/></pattern><g id="flower" fill="none" stroke="#abefdf" stroke-width="5"><path d="M0 0C-80-110 55-120 10-10C140-80 140 50 15 10C110 120-30 150 0 20C-90 130-150 15-15 10C-150-40-100-100 0 0Z"/><circle r="13"/></g></defs>
+<path fill="url(#sea)" d="M0 0h720v1280H0z"/><g fill="#b2fff0" opacity=".08"><path d="M120 0H230L0 850V400Z"/><path d="M400 0h80L140 1050H0Z"/><path d="M630 0h90L640 1000H470Z"/></g>
+<g opacity=".15"><use href="#flower" x="100" y="300"/><use href="#flower" x="570" y="550"/><use href="#flower" x="280" y="900"/></g>
+<path d="M0 1090Q120 1010 300 1110T720 1060V1280H0Z" fill="#fff2ad"/><path d="M0 1090Q120 1010 300 1110T720 1060V1280H0Z" fill="url(#sand)"/>
+<g stroke-linecap="round" fill="none"><path d="M24 1150Q-5 1040 45 950M24 1110L65 1060M29 1080L0 1040M680 1180L690 1010M688 1110L640 1080M690 1065L720 1030" stroke="#f18695" stroke-width="18"/><path d="M10 1180Q70 1060 48 980Q110 1080 40 1180M685 1190Q630 1070 675 1020Q655 1120 710 1190" stroke="#389c6c" stroke-width="14"/></g>
+<path d="m94 1180 12 24 27 4-20 20 4 27-23-13-24 13 5-27-20-20 27-4Z" fill="#f695c2" stroke="#b25586" stroke-width="5"/>
+<path d="M0 1240Q180 1190 340 1260T720 1220V1280H0Z" fill="#35cbd0"/>
+<g fill="#b6ffff33" stroke="#d4ffff99" stroke-width="2"><circle cx="40" cy="120" r="16"/><circle cx="670" cy="800" r="12"/><circle cx="580" cy="1140" r="22"/></g></svg>

@@ -5,6 +5,7 @@ android {
     defaultConfig {
         applicationId 'app.snakesponja'
         minSdk 26
+        testInstrumentationRunner 'app.snakesponja.FullscreenSmoke'
         targetSdk 35
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
         versionName '1.0.' + (System.getenv('BUILD_NUMBER') ?: '1')

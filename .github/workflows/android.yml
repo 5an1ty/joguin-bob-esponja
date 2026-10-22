@@ -34,13 +34,39 @@ jobs:
         working-directory: android
         env:
           BUILD_NUMBER: ${{ github.run_number }}
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Nomear APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk bob-esponja-snake.apk
       - uses: actions/upload-artifact@v4
         with:
           name: bob-esponja-snake-apk
           path: bob-esponja-snake.apk
+      - name: Habilitar aceleração do emulador
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verificar tela cheia no Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install android/app/build/outputs/apk/debug/app-debug.apk
+            adb install android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w app.snakesponja.test/app.snakesponja.FullscreenSmoke | tee fullscreen-test.log
+            grep -q FULLSCREEN_SMOKE_OK fullscreen-test.log
+            adb pull /sdcard/Android/data/app.snakesponja/files/ android-screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-fullscreen-check
+          path: |
+            fullscreen-test.log
+            android-screenshots/
       - name: Publicar download
         env:
           GH_TOKEN: ${{ github.token }}

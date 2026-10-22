@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Bob Esponja Snake</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="menu.css">
@@ -19,7 +19,7 @@
 
     <section id="menu" class="panel menu-panel">
       <div class="intro">
-        <div class="hero-copy"><p class="welcome">O fundo do mar está te esperando!</p><h2>Preparado para<br>mergulhar?</h2><p>Uma fome de aventura.<br>Um oceano de diversão.</p></div>
+        <div class="hero-copy"><p class="welcome">O fundo do mar está te esperando!</p><h2>Preparado para <br>mergulhar?</h2><p>Uma fome de aventura.<br>Um oceano de diversão.</p></div>
         <div class="character-stage"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><img id="heroCharacter" src="assets/bob.svg" alt="Bob Esponja sorrindo de braços abertos"><span class="floating-burger" aria-hidden="true">🍔</span><span class="hero-spark" aria-hidden="true">✦</span><div class="hero-caption"><strong id="heroName">Bob Esponja</strong><span id="heroTagline">O otimismo é seu superpoder.</span></div></div>
         <div class="quick-rules" aria-label="Regras do jogo"><div><span>🍔</span>Coma hambúrgueres</div><div><span>〰</span>Cresça</div><div><span>🪨</span>Desvie dos obstáculos</div></div>
         <div class="seabed" aria-hidden="true"><span class="pineapple">🍍</span><span class="coral">🪸</span><span class="shell">🐚</span></div>
@@ -86,7 +86,7 @@
 
     <section id="game" class="panel game-panel hidden">
       <div class="game-head">
-        <div><p class="eyebrow">PERSONAGEM</p><strong id="playingAs">Bob Esponja</strong></div>
+        <div class="character-plaque"><img id="playingAvatar" src="assets/bob.svg" alt=""><p class="eyebrow">PERSONAGEM</p><strong id="playingAs">Bob Esponja</strong></div>
         <div class="stat"><small>PONTUAÇÃO</small><strong id="score">0</strong></div>
         <div class="stat"><small>DIFICULDADE</small><strong id="level">Fácil</strong></div>
         <div class="game-actions"><button id="headerMenuBtn" class="menu-return" type="button">Voltar ao menu</button><button id="restartBtn" class="small-button" aria-label="Recomeçar partida imediatamente" title="Recomeçar">↻</button><button id="topPauseBtn" class="small-button" aria-label="Pausar jogo">Ⅱ</button></div>

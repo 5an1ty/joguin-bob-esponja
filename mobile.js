@@ -12,6 +12,21 @@ const joystick=document.createElement('div');joystick.id='joystick';joystick.set
 joystick.innerHTML='<span class="joystick-guide" aria-hidden="true">✥</span><span class="joystick-stick" aria-hidden="true"></span>';
 game.append(dock);
 dock.append(directionPad,joystick,document.getElementById('abilityBtn'),document.getElementById('topPauseBtn'));
+const mobileHudInfo=document.createElement('div');mobileHudInfo.id='mobileHudInfo';mobileHudInfo.hidden=true;
+const mobileBossPanel=document.querySelector('.boss-panel');
+document.querySelector('.game-head').insertBefore(mobileHudInfo,document.querySelector('.game-actions'));
+function positionMobileHud(){
+  const active=isFullscreen() && matchMedia(mobileBoardQuery).matches;
+  mobileHudInfo.hidden=!active;
+  if(active){
+    if(powerStatus.parentElement!==mobileHudInfo)mobileHudInfo.append(powerStatus,mobileBossPanel);
+  }else{
+    const frame=document.querySelector('.board-wrap');
+    if(powerStatus.parentElement!==frame)frame.prepend(powerStatus);
+    const status=document.querySelector('.status-bar');
+    if(mobileBossPanel.parentElement!==status)status.append(mobileBossPanel);
+  }
+}
 function positionPauseControl(){
   const button=document.getElementById('topPauseBtn');
   const mobile=matchMedia(mobileBoardQuery).matches;
@@ -21,6 +36,7 @@ function positionPauseControl(){
   }
   button.disabled=mobile && over;
   syncMobileControls();
+  positionMobileHud();
 }
 function applyControlPreferences(){
   positionPauseControl();

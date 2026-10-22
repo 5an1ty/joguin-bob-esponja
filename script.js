@@ -478,6 +478,7 @@ function updateStatus() {
       const title = document.createElement('strong');
       const shortLabels = {ghost:'Atravessa corpo',drill:'Atravessa pedras',super:'Imune + turbo',magnet:'Atrai comida'};
       title.textContent = `${effect.icon} ${shortLabels[type]}`;
+      title.dataset.hudLabel={ghost:'Corpo',drill:'Pedras',super:'Turbo',magnet:'Ímã'}[type];
       badge.title = effect.label;
       const remaining = document.createElement('span');
       const meter = document.createElement('progress');
@@ -493,6 +494,7 @@ function updateStatus() {
     const label = `ATIVO · ${Math.ceil((powers[type]-gameTime)/1000)}s`;
     const remaining = badge.querySelector('span');
     if (remaining.textContent !== label) remaining.textContent = label;
+    remaining.dataset.hudTime=`${Math.ceil((powers[type]-gameTime)/1000)}s`;
     badge.querySelector('progress').value = powers[type]-gameTime;
   }
   const defeated = beam?.defeated && beam.until > gameTime;

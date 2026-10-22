@@ -10,7 +10,7 @@ class PowerMobileReadabilityTests(unittest.TestCase):
     tearDown=test_game.GameTests.tearDown
     check=test_game.GameTests.check
 
-    def test_power_hud_is_centered_below_header_with_readable_cards(self):
+    def test_power_hud_stays_in_header_and_leaves_arena_clear(self):
         for width,height in [(320,568),(390,844),(768,1024),(844,390)]:
             self.page.set_viewport_size({'width':width,'height':height})
             self.page.evaluate("startGame();clearTimeout(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
@@ -18,18 +18,26 @@ class PowerMobileReadabilityTests(unittest.TestCase):
             baseline=self.page.locator('#board').bounding_box()
             self.page.evaluate("powers={ghost:gameTime+8000,drill:gameTime+8000,magnet:gameTime+10000};updateStatus()")
             hud=self.page.locator('#powerStatus').bounding_box()
-            status=self.page.locator('.status-bar').bounding_box()
-            self.assertAlmostEqual(hud['x']+hud['width']/2,width/2,delta=1)
-            self.assertGreater(hud['y'],status['y']+status['height'])
-            self.assertLess(hud['y']+hud['height'],height-100)
-            self.assertEqual(self.page.locator('#powerStatus').evaluate('el=>getComputedStyle(el).opacity'),'1')
-            badge=self.page.locator('#powerStatus .effect-badge').first
-            self.assertGreaterEqual(badge.bounding_box()['height'],60)
-            self.assertGreaterEqual(float(badge.locator('strong').evaluate('el=>parseFloat(getComputedStyle(el).fontSize)')),14)
-            self.assertEqual(self.page.locator('#powerStatus').evaluate('el=>getComputedStyle(el).pointerEvents'),'none')
+            header=self.page.locator('.game-head').bounding_box()
+            level=self.page.locator('#level').bounding_box()
+            pause=self.page.locator('#topPauseBtn').bounding_box()
+            self.assertGreaterEqual(hud['x'],level['x']+level['width'])
+            self.assertLessEqual(hud['x']+hud['width'],pause['x'])
+            self.assertGreaterEqual(hud['y'],header['y'])
+            self.assertLessEqual(hud['y']+hud['height'],header['y']+header['height'])
+            self.assertEqual(self.page.locator('.board-wrap #powerStatus').count(),0)
+            self.assertTrue(self.page.locator('#foodHint').is_hidden())
+            self.assertEqual(self.page.locator('#powerStatus .effect-badge').count(),3)
+            for badge in self.page.locator('#powerStatus .effect-badge').all():
+                self.assertGreaterEqual(badge.bounding_box()['height'],15)
+                self.assertEqual(badge.locator('strong').evaluate("el=>getComputedStyle(el,'::after').fontSize"),'12px')
+                self.assertEqual(badge.locator('span').get_attribute('data-hud-time')[-1],'s')
             self.assertEqual(self.page.locator('#board').bounding_box(),baseline)
             self.page.evaluate('powers={};updateStatus()')
             self.assertTrue(self.page.locator('#powerStatus').is_hidden())
+        self.page.evaluate('leaveFullscreen()')
+        self.page.wait_for_timeout(50)
+        self.assertEqual(self.page.locator('.board-wrap #powerStatus').count(),1)
 
     def test_battle_demonstrates_then_practices_double_tap(self):
         self.page.set_viewport_size({'width':390,'height':844})

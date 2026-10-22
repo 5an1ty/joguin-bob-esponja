@@ -351,10 +351,8 @@ class GameTests(unittest.TestCase):
         self.page.set_viewport_size({'width':390,'height':844})
         self.page.evaluate("startGame();if(paused)togglePause();clearInterval(timer);game.classList.add('fallback-fullscreen');resizeBoardForViewport()")
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-        hint=self.page.locator('#foodHint').bounding_box()
-        board=self.page.locator('#board').bounding_box()
-        self.assertGreaterEqual(hint['y'],board['y'])
-        self.assertLess(hint['y']+hint['height'],board['y']+110)
+        self.assertTrue(self.page.locator('#foodHint').is_hidden())
+        self.assertEqual(self.page.locator('.game-head #powerStatus').count(),1)
         self.check("assert(placeFood() && !foodUnderMobileControls(food),'food avoids top hint');")
         self.assertEqual(self.page.locator('#foodHint').evaluate('(el)=>getComputedStyle(el).pointerEvents'),'none')
 
@@ -580,8 +578,12 @@ class GameTests(unittest.TestCase):
                 self.assertGreater(pause['x'],width-120)
                 self.assertLessEqual(leave['y'],25)
             opacity=float(self.page.locator('#powerStatus').evaluate('(el)=>getComputedStyle(el).opacity'))
-            self.assertGreaterEqual(opacity,.75)
-            self.assertLessEqual(opacity,.85)
+            if width<=900:
+                self.assertGreaterEqual(opacity,.9)
+                self.assertLessEqual(opacity,1)
+            else:
+                self.assertGreaterEqual(opacity,.75)
+                self.assertLessEqual(opacity,.85)
             self.page.evaluate('leaveFullscreen()')
 
     def test_mute_from_pause_persists_after_reload(self):

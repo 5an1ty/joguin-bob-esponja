@@ -514,6 +514,7 @@ function updateStatus() {
     : defeated ? 'PLANKTON DERROTADO · +50 PONTOS' : 'Bordas livres ↔ ↕';
   if (bossStatus.textContent !== bossLabel) bossStatus.textContent = bossLabel;
   if(gameMode==='bullet')updateBulletHud();
+  else document.getElementById('bulletProgressHud').hidden=true;
   if(!paused && !over && menu.classList.contains('hidden') && currentMusicKey!==selectedMusicKey()) tocarMusica();
 }
 
@@ -554,7 +555,7 @@ function enemyColor(enemy) {
 }
 
 function enemyInterval(enemy) {
-  if(gameMode==='bullet')return bulletState.profile.enemyInterval*[1,.72,.5,.37][(enemy.aggression||1)-1];
+  if(gameMode==='bullet')return bulletState.profile.enemyInterval*[1,.72,.5,.475][(enemy.aggression||1)-1];
   return Math.max(70,settings[difficulty].bossInterval * [1,.72,.5][(enemy.aggression || 1)-1]);
 }
 
@@ -786,14 +787,14 @@ function releaseFrostBreath() {
   if(!target) return;
   const from={...snake[0]}, vector=frostVector(from,target);
   const angle=Math.atan2(vector.y,vector.x);
-  const victims=battleEnemies.map(enemy=>({enemy,v:frostVector(from,enemy)}))
+  const victims=activeEnemies().map(enemy=>({enemy,v:frostVector(from,enemy)}))
     .filter(({v})=> {
       const distance=Math.hypot(v.x,v.y);
       return (distance===0 || (v.x*Math.cos(angle)+v.y*Math.sin(angle))/distance>=Math.cos(Math.PI/6));
     }).sort((a,b)=>Math.hypot(a.v.x,a.v.y)-Math.hypot(b.v.x,b.v.y));
   const length=Math.max(9,...victims.map(({v})=>Math.hypot(v.x,v.y)));
   frostBreath={from,angle,length,startedAt:gameTime,until:gameTime+900};
-  victims.forEach(({enemy},i)=>{damageBattleEnemy(enemy,i===0?2:1);enemy.frozenUntil=gameTime+3000;});
+  victims.forEach(({enemy},i)=>{if(i===0 || gameMode!=='bullet')damageBattleEnemy(enemy,i===0?2:1);enemy.frozenUntil=gameTime+3000;});
   finishBattleAttack();
 }
 
@@ -942,6 +943,10 @@ function pararMusica() {
 
 // Efeitos sintetizados originais: cada poder tem sua própria assinatura sonora.
 const effectNotes = {
+  cannonFall:[{type:'sine',from:1100,to:170,time:.55,at:0},{type:'noise',from:1,to:.35,time:.2,at:.28}],
+  cannonBurst:[{type:'noise',from:1,to:.2,time:.25,at:0},{type:'sine',from:160,to:38,time:.3,at:0},{type:'triangle',from:850,to:240,time:.12,at:.04}],
+  dutchShot:[{type:'sawtooth',from:680,to:95,time:.18,at:0},{type:'sine',from:1300,to:360,time:.25,at:.035}],
+  barrageWarning:[{type:'square',from:180,to:230,time:.12,at:0},{type:'square',from:180,to:230,time:.12,at:.18},{type:'triangle',from:230,to:460,time:.16,at:.36}],
   cannonWarning:[{type:'sine',from:440,to:660,time:.12,at:0},{type:'sine',from:660,to:990,time:.12,at:.18},{type:'triangle',from:990,to:1320,time:.16,at:.36}],
   collect:[{type:'sine',from:620,to:930,time:.09,at:0},{type:'sine',from:960,to:1320,time:.1,at:.055}],
   spatula:[{type:'triangle',from:300,to:1400,time:.2,at:0},{type:'sine',from:1200,to:1800,time:.12,at:.16}],

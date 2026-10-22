@@ -119,3 +119,10 @@
 @media(max-width:900px),(pointer:coarse){.control-settings{display:block}}
 #game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo .boss-panel{display:flex!important;flex-direction:column;gap:1px;font-size:9px;white-space:nowrap}
 #game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo #bossHealth{width:100%;height:3px;min-height:3px;margin:0}
+
+#game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo #bulletProgressHud{width:100%;gap:3px}
+#game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo #bulletProgressHud progress{height:3px}
+
+/* Keep all three power names and phase counters inside the same 54px header. */
+#game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo:has(.effect-badge:nth-child(3)) .effect-badge{min-height:11px;height:11px;max-height:11px;padding-top:0;padding-bottom:1px}
+#game.game-panel.bullet-mode:is(:fullscreen,.fallback-fullscreen) #mobileHudInfo .boss-panel{flex-shrink:0}

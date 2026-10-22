@@ -277,3 +277,13 @@ footer{text-align:center;color:#e5fbff;font-size:11px;font-weight:700;padding:18
 #tutorialCards article{margin:0 0 18px}#tutorialCards svg,#overlayText svg{display:block;width:100%;max-height:100px;margin:8px auto;border-radius:12px}.tutorial-entry strong{color:#087556}
 
 #game.tutorial-mode #level{font-size:14px}#game.tutorial-mode #abilityBtn:disabled{opacity:.55}
+
+#bulletProgressHud{display:none;width:min(260px,100%);gap:5px}
+.bullet-mode #bulletProgressHud:not([hidden]){display:flex}
+#bulletProgressHud progress{appearance:none;border:0;border-radius:8px;overflow:hidden;background:#092a4770;height:6px;width:50%;min-width:0}
+#bulletProgressHud progress::-webkit-progress-bar{background:#092a4770}
+#bulletPhaseProgress::-webkit-progress-value{background:#8df06c;transition:width .18s}
+#bulletShieldProgress::-webkit-progress-value{background:#71e7ff;transition:width .18s}
+#bulletPhaseProgress::-moz-progress-bar{background:#8df06c}
+#bulletShieldProgress::-moz-progress-bar{background:#71e7ff}
+.bullet-mode #bossHealth{display:none}

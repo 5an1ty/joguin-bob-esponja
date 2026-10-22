@@ -21,7 +21,7 @@ class BulletHellTests(unittest.TestCase):
             assert(bulletState.phase===phase,'phase '+phase);
             const expected=phase<=4?5:phase<=7?8:10;
             assert(bulletGoal(phase)===expected,'quota '+phase);
-            if(phase<3)assert(obstacles.length===0,'no early rocks');
+            assert(obstacles.length>0,'scenario obstacles from phase 1');
             if(phase>=3)assert(obstacles.length>0,'more rocks from 3');
             const colors=bulletState.enemies.map(e=>e.aggression);
             if(phase<=4)assert(colors.every(c=>c===1),'normal enemies early');
@@ -66,18 +66,18 @@ class BulletHellTests(unittest.TestCase):
           assert(food===main && bulletState.nextFood===next && currentSpeed===speed,'yellow power does not accelerate Bullet Hell or disturb sequence');
         """)
 
-    def test_green_red_alternation_and_only_green_progresses_boss_and_infinite(self):
+    def test_exclusively_green_food_in_boss_and_infinite(self):
         self.start_bullet()
         self.check("""
           beginBulletPhase(11);placeFood();
           for(let i=0;i<8;i++){
-            const type=i%2===0?'green':'red';assert(food.type===type,'strict alternating type '+i);
+            const type='green';assert(food.type===type,'only green main food '+i);
             food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;
             collectFood();clearTimeout(timer);
-            assert(bulletState.progress===Math.floor(i/2)+1,'only green counts');
+            assert(bulletState.progress===i+1,'only green counts');
             assert(bulletState.phase===11,'food alone does not win boss phase');
           }
-          assert(bulletState.shots.filter(s=>s.owner==='green').length===16,'four shots for each green collection');
+          assert(bulletState.shots.filter(s=>s.owner==='green').length===32,'four shots for each green collection');
           beginBulletPhase(12);placeFood();const speed=currentSpeed;
           food={...snake[0],type:'red',id:++foodSerial};bulletState.mainFood=food;collectFood();
           assert(bulletState.progress===0 && currentSpeed===speed,'red not progress in infinite');
@@ -102,7 +102,7 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           beginBulletPhase(11);obstacles=[];
           const normal={x:7,y:5,kind:'plankton',aggression:1,hits:0,maxHealth:5,stunnedUntil:0,nextMoveAt:Infinity};
-          const boss={x:5,y:3,kind:'dutch',aggression:4,hits:0,maxHealth:16,stunnedUntil:0,nextMoveAt:Infinity,shootAt:Infinity,windup:null};
+          const boss={x:5,y:3,kind:'dutch',aggression:4,hits:0,maxHealth:10,stunnedUntil:0,nextMoveAt:Infinity,shootAt:Infinity,windup:null};
           bulletState.enemies=[normal,boss];bulletState.shots=[];emitFourShots({x:5,y:5},'green');
           gameTime+=300;updateShotList(bulletState.shots);
           assert(normal.hits===2 && boss.hits===1,'green damage differentiates boss');
@@ -206,3 +206,58 @@ class BulletHellTests(unittest.TestCase):
             if(!(track.duration>0))throw Error('empty '+key);
           }
         }""")
+
+    def test_bullet_breath_only_first_target_takes_damage(self):
+        self.start_bullet()
+        self.check("""
+          snake=[{x:4,y:5},{x:3,y:5},{x:2,y:5}];previousSnake=snake.map(p=>({...p}));
+          const enemies=[6,8,10].map(x=>({x,y:5,kind:'plankton',aggression:1,hits:0,maxHealth:5,nextMoveAt:Infinity}));
+          bulletState.enemies=enemies;
+          releaseFrostBreath();
+          assert(enemies[0].hits===2 && enemies[1].hits===0 && enemies[2].hits===0,'only nearest enemy receives breath damage');
+          assert(enemies.every(e=>e.frozenUntil===gameTime+3000),'all targets frozen');
+        """)
+
+    def test_boss_ten_hp_slow_pacing_and_once_only_telegraphed_barrage(self):
+        self.start_bullet()
+        self.check("""
+          beginBulletPhase(11);placeFood();
+          const boss=bulletState.enemies.find(e=>e.kind==='dutch');
+          assert(boss.maxHealth===10,'boss has 10 hp');
+          const redInterval=enemyInterval({aggression:3});
+          assert(enemyInterval(boss)>=199 && enemyInterval(boss)>=redInterval*.94 && enemyInterval(boss)<redInterval,'slower boss, only slightly faster than red');
+          boss.nextMoveAt=Infinity;boss.shootAt=Infinity;bulletState.enemies=[boss];
+          bulletState.nextCannon=Infinity;bulletState.nextRespawn=Infinity;
+          const events=[],original=playEffect;playEffect=k=>events.push(k);
+          try{
+            damageBulletEnemy(boss,6,0);assert(!boss.barrage,'no premature special');
+            damageBulletEnemy(boss,1,0);
+            assert(events.includes('barrageWarning') && !bulletState.hazards.length,'distinct warning before shadows');
+            const deployAt=boss.barrage.deployAt;
+            gameTime=deployAt-1;updateBulletMode();assert(!bulletState.hazards.length,'warning has reaction time');
+            gameTime=deployAt;updateBulletMode();
+            const hazards=bulletState.hazards;
+            assert(hazards.length===COLS && new Set(hazards.map(h=>h.x)).size===COLS && new Set(hazards.map(h=>h.y)).size===1,'entire bomb row');
+            assert(hazards.every(h=>h.impactAt-h.startedAt>=2000 && h.fireAt-h.startedAt>=2700),'slow impacts');
+            assert(events.includes('cannonFall'),'fall sound');
+            damageBulletEnemy(boss,1,0);assert(events.filter(e=>e==='barrageWarning').length===1,'only once');
+            gameTime=hazards[0].fireAt;updateBulletMode();
+            assert(events.includes('cannonBurst') && bulletState.shots.length===4,'impact sound and fragments');
+            assert(bulletState.shots.every(s=>s.speed<bulletState.profile.shotSpeed),'barrage fragments slower');
+            draw();
+          }finally{playEffect=original;}
+        """)
+
+    def test_progress_and_shield_bars_match_hud_and_sfx_are_distinct(self):
+        self.start_bullet()
+        self.check("""
+          bulletState.progress=2;bulletState.immunityCount=2;updateBulletHud();
+          assert(bossStatus.textContent==='2/5 - escudo 2/3','integrated readable counters');
+          const phase=document.getElementById('bulletPhaseProgress'),shield=document.getElementById('bulletShieldProgress');
+          assert(phase.max===5 && phase.value===2 && shield.max===3 && shield.value===2,'charging bars reflect counters');
+          beginBulletPhase(11);updateBulletHud();
+          assert(bossStatus.textContent==='Chefe 10/10 - escudo 0/3','boss victory stays based on hp');
+          for(const key of ['cannonFall','cannonBurst','dutchShot','barrageWarning'])assert(effectNotes[key]?.length>0,'new synthesized '+key);
+          gameMode='classic';updateStatus();
+          assert(getComputedStyle(document.getElementById('bulletProgressHud')).display==='none','no Bullet bars in other modes');
+        """)

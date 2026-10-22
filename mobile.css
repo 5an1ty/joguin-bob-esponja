@@ -65,3 +65,11 @@
 @media(max-width:900px),(pointer:coarse){#game.game-panel[data-control=joystick]:is(:fullscreen,.fallback-fullscreen) .mobile-dock{margin:0;right:auto;left:max(12px,env(safe-area-inset-left,0px));width:min(440px,calc(100% - 24px));align-items:flex-start}}
 @media(max-width:900px),(pointer:coarse){#game.game-panel[data-control=joystick] .mobile-dock{align-items:flex-start;margin-left:0}}
 .orientation-options span{display:block;width:26px;height:38px;margin:10px 0 2px;border:3px solid currentColor;border-radius:5px;font-size:0}.orientation-options [data-orientation=landscape] span{width:40px;height:26px;margin-top:16px;margin-bottom:8px}
+/* Mobile: pausa e tela cheia no topo; reinício somente no menu da partida. */
+@media(max-width:900px),(pointer:coarse){
+  #game.game-panel #restartBtn{display:none!important}
+  #game.game-panel .game-actions #topPauseBtn,#game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-actions #topPauseBtn{position:relative!important;inset:auto!important;display:grid;place-items:center;width:44px!important;min-width:44px!important;max-width:44px!important;height:44px!important;min-height:44px!important;margin:0!important;padding:10px!important;background:#064269e6;border:1px solid #8fdffb66;border-radius:12px;box-shadow:none;pointer-events:auto;font-size:0!important}
+  #topPauseBtn .pause-icon{display:block;width:18px;height:21px;border-left:6px solid currentColor;border-right:6px solid currentColor}
+  #game .game-actions #topPauseBtn:disabled{opacity:.5;cursor:default}
+  #game.game-panel .mobile-dock:empty{display:none}
+}

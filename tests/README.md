@@ -91,12 +91,14 @@ com ativação gratuita de Bob, Patrick e Sandy e indicação própria no mobile
 
 ## Controles mobile e tela cheia
 
-O celular inicia com arrasto contínuo. O menu permite escolher Arrastar, Joystick ou D-Pad, com preferências salvas no navegador. Dois toques rápidos no mapa ativam o poder na Batalha; o botão é opcional. Pausa/continuar fica grande na parte inferior, e reinício imediato e tela cheia ficam no topo.
+O celular inicia com arrasto contínuo. O menu permite escolher Arrastar, Joystick ou D-Pad, com preferências salvas no navegador. Dois toques rápidos no mapa ativam o poder na Batalha; o botão é opcional. No mobile, pausa com ícone de duas barras e saída de tela cheia ficam no canto superior direito. Continuar e reiniciar ficam no menu de pausa; não há botão de pausa ou jogar novamente no rodapé.
 
 Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo menor e adapta o eixo maior, inclusive nas rotações. O corpo é remapeado mantendo continuidade; se a nova área não comportar todo o corpo sem sobreposição, apenas a cauda excedente é reduzida. Pontuação, poderes e progresso dos inimigos são mantidos. A comida evita as áreas cobertas pelos controles.
 
-`test_control_options.py` valida os três controles, persistência, joystick e D-Pad com área de toque ampliada, poder por toque duplo, rejeição de arrasto/toque longo, doze combinações de tela/controle, reorganização segura, pausa inferior e reinício imediato.
+`test_control_options.py` valida os três controles, persistência, joystick e D-Pad com área de toque ampliada, poder por toque duplo, rejeição de arrasto/toque longo, doze combinações de tela/controle, reorganização segura, pausa superior e reinício pelo menu.
 
 `test_mobile_ui.py` valida arrasto contínuo e cancelamento, guia inicial sem pausa e sem perda de pontos, e as cinco demonstrações automáticas do treino de Batalha antes da prática.
 
 `test_orientation.py` verifica a escolha de orientação ao entrar em tela cheia com joystick/arrasto, cancelamento sem perder progresso, solicitação de bloqueio ao navegador, orientação manual quando o bloqueio não está disponível, retomada após girar, joystick à esquerda e troca de posições entre Recomeçar e Continuar no menu de pausa.
+
+`test_mobile_pause_hud.py` verifica o ícone de pausa no topo, ausência dos botões inferiores e reinício/continuação dentro do menu em telas vertical, horizontal e tablet.

@@ -12,7 +12,18 @@ const joystick=document.createElement('div');joystick.id='joystick';joystick.set
 joystick.innerHTML='<span class="joystick-guide" aria-hidden="true">✥</span><span class="joystick-stick" aria-hidden="true"></span>';
 game.append(dock);
 dock.append(directionPad,joystick,document.getElementById('abilityBtn'),document.getElementById('topPauseBtn'));
+function positionPauseControl(){
+  const button=document.getElementById('topPauseBtn');
+  const mobile=matchMedia(mobileBoardQuery).matches;
+  const parent=mobile?document.querySelector('.game-actions'):dock;
+  if(button.parentElement!==parent){
+    if(mobile)parent.insertBefore(button,fullscreenBtn);else parent.append(button);
+  }
+  button.disabled=mobile && over;
+  syncMobileControls();
+}
 function applyControlPreferences(){
+  positionPauseControl();
   game.dataset.control=mobileControlMode;
   game.classList.toggle('show-mobile-power',showMobilePower);
   document.querySelectorAll('button[data-control]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.control===mobileControlMode)));
@@ -194,8 +205,11 @@ function updateMovementGuide(now){
 function syncMobileControls(){
   const top=document.getElementById('topPauseBtn');if(!top)return;
   top.dataset.state=over?'over':paused?'paused':'playing';
-  top.textContent=over?'Jogar novamente':paused?'Continuar':'Pausar';
-  top.setAttribute('aria-label',over?'Jogar novamente':paused?'Retomar jogo':'Pausar jogo');
+  const mobile=matchMedia(mobileBoardQuery).matches;
+  top.disabled=mobile && over;
+  if(mobile)top.innerHTML='<span class="pause-icon" aria-hidden="true"></span>';
+  else top.textContent=over?'Jogar novamente':paused?'Continuar':'Pausar';
+  top.setAttribute('aria-label',mobile?(paused?'Retomar jogo':'Pausar jogo'):(over?'Jogar novamente':paused?'Retomar jogo':'Pausar jogo'));
 }
 // A habilidade pronta é indicada por estado real, incluindo alterações de recarga.
 const abilityButton=document.getElementById('abilityBtn');

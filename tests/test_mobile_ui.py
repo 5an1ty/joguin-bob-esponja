@@ -42,8 +42,8 @@ class MobileInterfaceTests(unittest.TestCase):
     assert page.locator('#abilityBtn').is_hidden()
     assert page.locator('.touch-controls').is_hidden()
     pause=page.locator('#topPauseBtn').bounding_box()
-    assert pause['y']>height-90 and pause['width']>=220
-    controls=[page.locator(x).bounding_box() for x in ['#restartBtn','#fullscreenBtn']]
+    assert pause['y']<60 and pause['width']>=44 and pause['x']>width-120
+    controls=[page.locator(x).bounding_box() for x in ['#topPauseBtn','#fullscreenBtn']]
     assert all(x['y']<60 and x['x']>=0 and x['x']+x['width']<=width for x in controls)
    page.set_viewport_size({'width':390,'height':844});page.evaluate('resizeBoardForViewport()');page.wait_for_timeout(100)
   

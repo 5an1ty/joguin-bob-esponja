@@ -214,6 +214,7 @@ window.addEventListener('orientationchange', resizeBoardForViewport);
 
 function resizeBoardForViewport() {
   const active = isFullscreen();
+  if(typeof positionPauseControl==='function')positionPauseControl();
   document.body.classList.toggle('game-fullscreen', active);
   if(typeof updateOrientationHint==='function')updateOrientationHint();
   fullscreenBtn.textContent = active ? '⛶ Sair da tela cheia' : '⛶ Tela cheia';

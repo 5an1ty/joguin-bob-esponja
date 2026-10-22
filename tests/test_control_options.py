@@ -75,7 +75,7 @@ class ControlOptionsTests(unittest.TestCase):
      page.locator('[data-dir=up]').dispatch_event('pointerdown',{'pointerId':8,'pointerType':'touch','clientX':rect['x']+rect['width']/2,'clientY':rect['y']-7})
      assert page.evaluate('nextDirection.y===-1')
      page.evaluate('clearPadPointer()')
-    pause=page.locator('#topPauseBtn').bounding_box();assert pause['width']>300 and pause['y']>700
+    pause=page.locator('#topPauseBtn').bounding_box();assert pause['width']>=44 and pause['y']<60 and pause['x']>270
     # Layout fills all pixels, including after rotations with a live snake.
     for width,height in [(320,568),(390,844),(844,390),(768,1024)]:
      page.set_viewport_size({'width':width,'height':height});page.evaluate('resizeBoardForViewport()');page.wait_for_timeout(70)
@@ -88,12 +88,12 @@ class ControlOptionsTests(unittest.TestCase):
   
    page.locator('#topPauseBtn').click();assert page.evaluate('paused')
    page.locator('#topPauseBtn').click();assert page.evaluate('!paused')
-   page.evaluate('score=123;clearTimeout(timer)');page.locator('#restartBtn').click()
+   page.evaluate('score=123;clearTimeout(timer)');page.locator('#topPauseBtn').click();page.locator('#overlayRestartBtn').click()
    assert page.evaluate('score===0 && !paused && !playableTutorial')
    page.evaluate('goMenu()');page.reload()
    assert page.locator('button[data-control=swipe]').get_attribute('aria-pressed')=='true'
    assert page.locator('#showPowerButton').is_checked()
    assert not errors,errors
-   print('PASS: control choices and persistence, joystick/D-Pad/drag, tap power and drag/hold rejection, 12 full-screen layouts, safe reflow/food, lower pause and immediate restart.')
+   print('PASS: control choices and persistence, joystick/D-Pad/drag, tap power and drag/hold rejection, 12 full-screen layouts, safe reflow/food, upper pause and menu restart.')
    b.close()
   server.shutdown();server.server_close()

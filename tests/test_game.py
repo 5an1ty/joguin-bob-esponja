@@ -402,7 +402,8 @@ class GameTests(unittest.TestCase):
         self.assertAlmostEqual(board['width'],390,delta=1)
         self.assertAlmostEqual(board['height'],844,delta=1)
         self.assertGreaterEqual(power['width'],360)
-        self.assertLess(power['y']+power['height'],pause['y'])
+        self.assertLess(pause['y'],60)
+        self.assertGreater(power['y'],700)
         self.check("assert(placeFood() && !foodUnderMobileControls(food),'food remains visible');")
 
     def test_map_geometry_stable_on_power_pickup_and_expiry(self):
@@ -573,9 +574,10 @@ class GameTests(unittest.TestCase):
             self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
             pause=self.page.locator('#topPauseBtn').bounding_box()
             leave=self.page.locator('#fullscreenBtn').bounding_box()
-            self.assertGreater(pause['width'],200)
             if width<=900:
-                self.assertGreater(pause['y'],height-100)
+                self.assertGreaterEqual(pause['width'],44)
+                self.assertLessEqual(pause['y'],25)
+                self.assertGreater(pause['x'],width-120)
                 self.assertLessEqual(leave['y'],25)
             opacity=float(self.page.locator('#powerStatus').evaluate('(el)=>getComputedStyle(el).opacity'))
             self.assertGreaterEqual(opacity,.75)

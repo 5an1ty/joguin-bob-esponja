@@ -58,3 +58,5 @@ Nas fases **3, 6 e 9**, o Bullet Hell pausa para escolher um card ilustrado. Os 
 - **Saraivada fantasmagórica (MÍTICO):** um uso por partida, ativado pelo botão Saraivada ou tecla V. Lança 56 balas roxas pelo mapa, destrói obstáculos, causa 2 de dano aos inimigos e não acerta o jogador. O poder normal do personagem continua disponível.
 
 As ondas de canhões ficam mais frequentes e passam de 1 até 4 bombas por lançamento conforme a fase; a luta contra o chefe mantém uma redução de pressão.
+
+A trilha `musicas/bgm_menu_mode.mp3` toca no menu e na pausa comum. As escolhas de cartas pausam apenas a simulação, mantendo a música da partida. Continuar retoma a trilha de jogo do ponto em que parou. A entrada no menu tenta iniciar o áudio e repete a tentativa na primeira interação permitida pelo navegador, respeitando Silenciar música/Silenciar tudo.

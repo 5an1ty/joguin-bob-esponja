@@ -365,8 +365,9 @@ function showBulletUpgrade(){
   if(!bulletState.offeredUpgrades.length)return;
   bulletUpgradeDialog.querySelector('.upgrade-level').textContent=`Fase ${bulletState.phase} · Escolha ${bulletState.upgrades.length+1}/3`;
   bulletUpgradeDialog.querySelector('.upgrade-options').innerHTML=bulletState.offeredUpgrades.map(id=>{const c=bulletUpgradeChoices.find(c=>c.id===id);return `<button type="button" class="upgrade-card${c.mythic?' mythic-card':''}" data-upgrade="${c.id}">${c.mythic?'<span class="mythic-tag">MÍTICO</span>':''}<img src="${c.image}" alt="" width="240" height="130"><strong>${c.name}</strong><span>${c.text}</span>${c.hint?`<small class="upgrade-hint">${c.hint}</small>`:''}</button>`;}).join('');
-  if(!paused)togglePause();
   bulletState.upgradePending=true;
+  if(!paused)togglePause({forUpgrade:true});
+  tocarMusica();
   overlay.classList.add('hidden');bulletUpgradeDialog.hidden=false;
   bulletUpgradeDialog.querySelector('button').focus();
 }

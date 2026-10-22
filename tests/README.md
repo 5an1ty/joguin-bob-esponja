@@ -120,3 +120,5 @@ No Bullet Hell, obstáculos aparecem desde a fase 1. O sopro causa 2 de dano ape
 `test_bullet_upgrades.py` valida a pausa na transição real para a fase 3, escolha única e persistência na partida, reinício, danos 3/2 do sopro, homing com alcance de 6 células, ressurreição em colisão real e proteção completa de 5s, grupos e limite de bombas, carregamento das ilustrações, foco por teclado e cards nos layouts 390×844, 844×390 e 320×568.
 
 `test_bullet_upgrade_pool.py` cobre as escolhas acumuladas nas fases 3/6/9, o retorno dos recusados, exclusão dos adquiridos mesmo após consumo, os limites exatos de probabilidade mítica (100 em 1000 amostras por sorteio), o laser vermelho perfurante, a intangibilidade por 4s e precedência sobre Salva-vidas, a ativação por V e toque, os danos/obstáculos da saraivada e o card mítico animado.
+
+`test_music_navigation.py` valida a trilha do menu na pausa e navegação, posição preservada ao continuar, ausência de pausa/reinício nas três escolhas de cartas, preferências de silêncio, interação inicial do menu e decodificação do MP3 `bgm_menu_mode`.

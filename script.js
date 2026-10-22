@@ -878,12 +878,13 @@ function updateBestDisplay() {
 // =====================================
 
 const musicSources = Object.fromEntries([
-  'bgm_easy_explore','bgm_easy_boss','bgm_hard_explore','bgm_hard_boss','bgm_battle_mode','bgm_bullet_mode','bgm_bullet_boss'
+  'bgm_easy_explore','bgm_easy_boss','bgm_hard_explore','bgm_hard_boss','bgm_battle_mode','bgm_bullet_mode','bgm_bullet_boss','bgm_menu_mode'
 ].map(key=>[key,`musicas/${key}.mp3`]));
 const musicTracks=Object.fromEntries(Object.entries(musicSources).map(([key,src])=>[key,new Audio(src)]));
 const musicas={easy:musicTracks.bgm_easy_explore,medium:musicTracks.bgm_hard_explore,hard:musicTracks.bgm_hard_explore};
 function allMusicTracks() {return [...new Set([...Object.values(musicas),...Object.values(musicTracks)])];}
 function selectedMusicKey() {
+  if(!menu.classList.contains('hidden') || (paused && !(gameMode==='bullet' && bulletState.upgradePending)))return 'bgm_menu_mode';
   if(gameMode==='bullet')return bulletState.phase===11?'bgm_bullet_boss':'bgm_bullet_mode';
   if(gameMode==='battle') return 'bgm_battle_mode';
   return `bgm_${difficulty==='easy'?'easy':'hard'}_${activeEnemies().length?'boss':'explore'}`;
@@ -911,7 +912,7 @@ let currentMusicKey = null;
 function tocarMusica() {
   const key=selectedMusicKey();
   currentMusicKey=key;
-  const musicaSelecionada = gameMode==='classic' && !activeEnemies().length ? musicas[difficulty] : musicTracks[key];
+  const musicaSelecionada = key==='bgm_easy_explore' || key==='bgm_hard_explore' ? musicas[difficulty] : musicTracks[key];
 
   if (
     musicaAtual === musicaSelecionada &&
@@ -921,9 +922,8 @@ function tocarMusica() {
   }
 
   if (musicaAtual !== musicaSelecionada) {
-    pararMusica();
+    if(musicaAtual)musicaAtual.pause();
     musicaAtual = musicaSelecionada;
-    musicaAtual.currentTime = 0;
   }
   currentMusicKey=key;
   musicaAtual.muted = musicMuted || allMuted;
@@ -1153,6 +1153,7 @@ function startGame(options={}) {
   if(typeof closeBulletUpgrade==='function'){closeBulletUpgrade();bulletState.upgradePending=false;}
   stopMovementGuide();
   stopEffects();
+  pararMusica();
   unlockEffects();
   clearInterval(timer);
   configureGrid();
@@ -1671,8 +1672,8 @@ window.addEventListener('blur', () => clearPadPointer());
 // PAUSAR E CONTINUAR
 // =====================================
 
-function togglePause() {
-  if(gameMode==='bullet' && bulletState.upgradePending)return;
+function togglePause(options={}) {
+  if(gameMode==='bullet' && bulletState.upgradePending && !options.forUpgrade)return;
   if(typeof joystickEditor!=='undefined' && joystickEditor){finishJoystickEdit(false);return;}
   orientationResumePending=false;
   if(playableTutorial?.explained && paused && !playableTutorial.advancing)return;
@@ -1708,11 +1709,7 @@ function togglePause() {
   document.getElementById('overlayTitle').textContent =
     'Jogo pausado';
 
-  if (paused) {
-    if (musicaAtual) musicaAtual.pause();
-  } else {
-    tocarMusica();
-  }
+  tocarMusica();
 
   document.getElementById('overlayText').textContent =
     'Respire fundo, mergulhador!';
@@ -1789,7 +1786,7 @@ function goMenu() {
   game.classList.add('hidden');
   menu.classList.remove('hidden');
 
-  pararMusica();
+  tocarMusica();
 }
 
 // O canvas acompanha os pixels físicos da tela; a grade mantém células quadradas.
@@ -2496,3 +2493,12 @@ pauseFullscreenBtn.addEventListener('click',()=>fullscreenBtn.click());
 document.getElementById('abilityBtn').addEventListener('pointerdown',event=>{event.preventDefault();useAbility();});
 document.getElementById('abilityBtn').addEventListener('click',event=>{if(event.detail===0)useAbility();});
 updateCharacterChoices();
+
+
+// Try on entry; retry on a menu gesture when the browser blocks initial autoplay.
+function startMenuMusicFromGesture(){
+  if(!menu.classList.contains('hidden'))tocarMusica();
+}
+document.addEventListener('pointerdown',startMenuMusicFromGesture);
+document.addEventListener('keydown',startMenuMusicFromGesture);
+tocarMusica();

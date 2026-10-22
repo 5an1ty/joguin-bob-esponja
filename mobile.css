@@ -114,3 +114,6 @@
 #joystickEditBar strong,#joystickEditBar span{display:block;line-height:1.4}#joystickEditBar strong{font-size:15px}#joystickEditBar span{font-size:11px;color:#c2eaf6;margin-top:3px}#joystickEditBar>div{display:flex;justify-content:center;gap:7px;margin-top:10px}#joystickEditBar button{min-height:44px;padding:8px 11px;border:0;border-radius:11px;background:#c4eff9;color:#12445e;font:900 12px Nunito,system-ui;cursor:pointer}
 #game.game-panel{position:relative}
 @media(max-width:360px){#game.game-panel:is(:fullscreen,.fallback-fullscreen) .game-head .stat strong{font-size:13px}}
+/* As preferências de toque aparecem apenas no layout mobile do jogo. */
+.control-settings{display:none}
+@media(max-width:900px),(pointer:coarse){.control-settings{display:block}}

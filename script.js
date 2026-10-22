@@ -392,6 +392,7 @@ let over = false;
 
 const foodTypes = {
   green: {color:'#55f287',icon:'✦',label:'Verde · Estilhaços aliados',duration:0},
+  luck: {color:'#c99dff',icon:'✧',label:'Intangibilidade',duration:4000},
   immunity: {color:'#83f4e3',icon:'🛡',label:'Imunidade',duration:3000},
   normal: {color: '#f5a62a', icon: '🍔', label: 'Clássico', duration: 0},
   ghost: {color: '#bc8cff', icon: '👻', label: 'Atravessar o corpo', duration: 8000},
@@ -461,6 +462,7 @@ function refreshSpeed() {
 
 function updateStatus() {
   updateAbilityButton();
+  if(typeof updateMythicButton==='function')updateMythicButton();
   document.querySelector('.game-footer span').textContent=`🍔 Hambúrguer = +${10*(gameMode==='classic'?{easy:1,medium:2,hard:3}[difficulty]:1)} pontos`;
   const type = food?.type || 'normal';
   const description=type==='normal' ? `Normal · +${10*(gameMode==='classic'?{easy:1,medium:2,hard:3}[difficulty]:1)} pontos` : foodDescriptions[type];
@@ -481,7 +483,7 @@ function updateStatus() {
       badge.dataset.power = type;
       badge.style.setProperty('--effect-color', effect.color);
       const title = document.createElement('strong');
-      const shortLabels = {ghost:'Atravessa corpo',drill:'Atravessa pedras',super:'Imune + turbo',magnet:'Atrai comida',immunity:'Imunidade'};
+      const shortLabels = {ghost:'Atravessa corpo',drill:'Atravessa pedras',super:'Imune + turbo',magnet:'Atrai comida',immunity:'Imunidade',luck:'Intangibilidade'};
       title.textContent = `${effect.icon} ${shortLabels[type]}`;
       title.dataset.hudLabel=shortLabels[type];
       badge.title = effect.label;
@@ -627,7 +629,7 @@ function explodeBomb(bomb) {
   triggerTutorialLesson('bomb');
 }
 
-function isInvulnerable() {return !!playableTutorial || hasPower('super') || hasPower('immunity') || (isCombatMode() && sandyImmuneUntil>gameTime);}
+function isInvulnerable() {return hasPower('luck') || !!playableTutorial || hasPower('super') || hasPower('immunity') || (isCombatMode() && sandyImmuneUntil>gameTime);}
 function resolveEnemyContact(enemy) {
   if(character==='sandy' && karateArmed && activeEnemies().includes(enemy)) {
     karateArmed=false;sandyImmuneUntil=gameTime+3000;
@@ -795,7 +797,7 @@ function releaseFrostBreath() {
   const length=Math.max(9,...victims.map(({v})=>Math.hypot(v.x,v.y)));
   frostBreath={from,angle,length,startedAt:gameTime,until:gameTime+900};
   victims.forEach(({enemy},i)=>{
-    const damage=gameMode==='bullet'?(bulletState.upgrade==='frost'?(i===0?3:2):(i===0?2:0)):(i===0?2:1);
+    const damage=gameMode==='bullet'?(hasBulletUpgrade('frost')?(i===0?3:2):(i===0?2:0)):(i===0?2:1);
     if(damage)damageBattleEnemy(enemy,damage);enemy.frozenUntil=gameTime+3000;
   });
   finishBattleAttack();
@@ -946,6 +948,8 @@ function pararMusica() {
 
 // Efeitos sintetizados originais: cada poder tem sua própria assinatura sonora.
 const effectNotes = {
+  lucky:[{type:'sine',from:660,to:1320,time:.15,at:0},{type:'triangle',from:990,to:1980,time:.2,at:.1}],
+  mythic:[{type:'sawtooth',from:160,to:640,time:.3,at:0},{type:'noise',from:1,to:.3,time:.35,at:.1},{type:'sine',from:1280,to:320,time:.3,at:.2}],
   green:[{type:'sine',from:740,to:260,time:.48,at:0},{type:'sine',from:1110,to:390,time:.42,at:.07},{type:'triangle',from:370,to:185,time:.35,at:.12}],
   cannonFall:[{type:'sine',from:1100,to:170,time:.55,at:0},{type:'noise',from:1,to:.35,time:.2,at:.28}],
   cannonBurst:[{type:'noise',from:1,to:.2,time:.25,at:0},{type:'sine',from:160,to:38,time:.3,at:0},{type:'triangle',from:850,to:240,time:.12,at:.04}],
@@ -1723,6 +1727,7 @@ function togglePause() {
     paused ? '▶' : 'II';
   updateAbilityButton();
   syncMobileControls();
+  if(typeof updateMythicButton==='function')updateMythicButton();
 }
 // =====================================
 // FIM DE JOGO
@@ -1730,7 +1735,7 @@ function togglePause() {
 
 function endGame() {
   if (over) return;
-  if(gameMode==='bullet' && tryBulletRevive())return;
+  if(gameMode==='bullet' && tryBulletDamageProtection())return;
   stopMovementGuide();
   resetMobileInput();
   playEffect('death');
@@ -1761,6 +1766,7 @@ function endGame() {
 
   document.getElementById('pauseBtn').textContent = '↻';
   syncMobileControls();
+  if(typeof updateMythicButton==='function')updateMythicButton();
 }
 
 // =====================================
@@ -1847,7 +1853,8 @@ function paintWrapped(cell, paint) {
 
 function applyCharacterEffect() {
   // Troca visual solicitada: passagem por obstáculos fica translúcida.
-  if(character==='sandy' && sandyImmuneUntil>gameTime) ctx.globalAlpha = .45;
+  if(hasPower('luck'))ctx.globalAlpha=.35;
+  else if(character==='sandy' && sandyImmuneUntil>gameTime) ctx.globalAlpha = .45;
   else if(hasPower('drill')) ctx.globalAlpha = .55;
   if(hasPower('ghost')) {ctx.shadowColor = '#bc8cff';ctx.shadowBlur = 7;}
   if(hasPower('super')) {ctx.shadowColor = '#ffe45c';ctx.shadowBlur = 12;}
@@ -1963,7 +1970,7 @@ function drawStaticScene() {
 
 function paintSnakeSprite(x,y,index) {
   const scaleX=canvas.width/BOARD_WIDTH,scaleY=canvas.height/BOARD_HEIGHT;
-  const key=`${character}:${index===0}:${hasPower('ghost')}:${hasPower('drill')}:${hasPower('super')}:${karateArmed}:${sandyImmuneUntil>gameTime}:${scaleX}:${scaleY}`;
+  const key=`${character}:${index===0}:${hasPower('ghost')}:${hasPower('drill')}:${hasPower('super')}:${hasPower('luck')}:${karateArmed}:${sandyImmuneUntil>gameTime}:${scaleX}:${scaleY}`;
   const padding=8,size=CELL+padding*2;
   let sprite=spriteCache.get(key);
   if(!sprite) {
@@ -2024,7 +2031,7 @@ function draw(alpha = movementProgress(), now = performance.now()) {
     if(positions.length)paintWrapped(positions[0],(x,y)=>paintSnakeSprite(x,y,0));
   } else {
   ctx.save();
-  ctx.globalAlpha = character==='sandy' && sandyImmuneUntil>gameTime ? .45 : hasPower('drill') ? .55 : 1;
+  ctx.globalAlpha = hasPower('luck') ? .35 : character==='sandy' && sandyImmuneUntil>gameTime ? .45 : hasPower('drill') ? .55 : 1;
   ctx.strokeStyle = character==='dutch'?'#64efb2':character === 'bob' ? '#ffd92e' : '#ff829b';
   ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.beginPath();

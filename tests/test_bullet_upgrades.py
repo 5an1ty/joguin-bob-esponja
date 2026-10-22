@@ -1,4 +1,4 @@
-"""Phase-five choice, upgrade effects and progressive cannon density in Chromium."""
+"""Three-stage choice, upgrade effects and progressive cannon density in Chromium."""
 import unittest
 from tests import test_game
 from tests import test_bullet_hell
@@ -12,13 +12,13 @@ class BulletUpgradeTests(unittest.TestCase):
     check=test_game.GameTests.check
     start_bullet=test_bullet_hell.BulletHellTests.start_bullet
 
-    def test_phase_five_choice_freezes_game_and_requires_exactly_one_selection(self):
+    def test_phase_three_choice_freezes_game_and_requires_exactly_one_selection(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(4);bulletState.progress=4;
+          beginBulletPhase(2);bulletState.progress=4;
           food={...wrap({x:snake[0].x+direction.x,y:snake[0].y+direction.y}),type:'green',id:++foodSerial};bulletState.mainFood=food;
           tick();
-          assert(bulletState.phase===5 && paused && bulletState.upgradePending,'phase 5 pauses for choice');
+          assert(bulletState.phase===3 && paused && bulletState.upgradePending,'phase 3 pauses for choice');
           assert(food.type==='red' && bulletState.progress===0,'food alternation survives choice');
           assert(!bulletUpgradeDialog.hidden && overlay.classList.contains('hidden'),'upgrade is the active dialog');
           togglePause();assert(paused,'pause shortcut cannot bypass choice');
@@ -30,15 +30,15 @@ class BulletUpgradeTests(unittest.TestCase):
         self.assertTrue(self.page.locator('#bulletUpgradeDialog img').evaluate_all('(imgs)=>imgs.every(i=>i.complete && i.naturalWidth>0)'))
         self.page.locator('[data-upgrade=homing]').click()
         self.check("""
-          assert(!paused && bulletUpgradeDialog.hidden && bulletState.upgrade==='homing','choice resumes same phase');
+          assert(!paused && bulletUpgradeDialog.hidden && hasBulletUpgrade('homing'),'choice resumes same phase');
           assert(!chooseBulletUpgrade('revive') && bulletState.reviveCharges===0,'second selection rejected');
-          beginBulletPhase(6);assert(!paused && bulletState.upgrade==='homing','upgrade persists without repeated dialog');
+          beginBulletPhase(4);assert(!paused && hasBulletUpgrade('homing'),'upgrade persists between milestones');
         """)
 
     def test_frost_upgrade_damages_first_and_later_targets(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(5);chooseBulletUpgrade('frost');clearTimeout(timer);
+          beginBulletPhase(3);chooseBulletUpgrade('frost');clearTimeout(timer);
           snake=[{x:4,y:5},{x:3,y:5},{x:2,y:5}];previousSnake=snake.map(p=>({...p}));
           const enemies=[6,8,10].map(x=>({x,y:5,kind:'plankton',aggression:1,hits:0,maxHealth:8,nextMoveAt:Infinity}));
           bulletState.enemies=enemies;releaseFrostBreath();
@@ -49,7 +49,7 @@ class BulletUpgradeTests(unittest.TestCase):
     def test_homing_seeks_nearby_plankton_without_changing_speed_or_hitting_twice(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(5);chooseBulletUpgrade('homing');clearTimeout(timer);
+          beginBulletPhase(3);chooseBulletUpgrade('homing');clearTimeout(timer);
           const enemy={x:7,y:7,kind:'plankton',aggression:1,hits:0,maxHealth:8};
           bulletState.enemies=[enemy];bulletState.shots=[];emitFourShots({x:5,y:5},'green');
           const shot=bulletState.shots.find(s=>s.dx===1),speed=shot.speed;
@@ -66,14 +66,14 @@ class BulletUpgradeTests(unittest.TestCase):
     def test_revive_handles_real_fatal_collision_once_and_grants_five_seconds(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(5);chooseBulletUpgrade('revive');clearTimeout(timer);
+          beginBulletPhase(3);chooseBulletUpgrade('revive');clearTimeout(timer);
           snake=[{x:5,y:5},{x:4,y:5},{x:3,y:5},{x:2,y:5}];previousSnake=snake.map(p=>({...p}));
           direction=nextDirection={x:1,y:0};directionQueue=[];powers={};
           bulletState.enemies=[];bulletState.progress=2;score=123;
           obstacles=[{x:6,y:5}];food={x:20,y:15,type:'green',id:++foodSerial};bulletState.mainFood=food;
           tick();clearTimeout(timer);
           assert(!over && bulletState.reviveCharges===0 && powers.immunity===gameTime+5000,'fatal obstacle consumes one revive');
-          assert(isInvulnerable() && bulletState.progress===2 && score===123 && bulletState.phase===5,'same run preserved with immunity');
+          assert(isInvulnerable() && bulletState.progress===2 && score===123 && bulletState.phase===3,'same run preserved with immunity');
           assert(overlay.classList.contains('hidden'),'revive does not show game-over dialog');
           const until=bulletState.reviveUntil;
           for(let i=0;i<3;i++){food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();}
@@ -85,11 +85,11 @@ class BulletUpgradeTests(unittest.TestCase):
     def test_restart_resets_upgrade_and_return_to_menu_closes_choice(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(5);chooseBulletUpgrade('revive');clearTimeout(timer);
-          beginBulletPhase(6);assert(bulletState.reviveCharges===1,'unused charge persists');
+          beginBulletPhase(3);chooseBulletUpgrade('revive');clearTimeout(timer);
+          beginBulletPhase(4);assert(bulletState.reviveCharges===1,'unused charge persists');
           startGame({skipTutorial:true});clearTimeout(timer);stopMovementGuide();
-          assert(bulletState.upgrade===null && bulletState.reviveCharges===0 && !paused,'new run resets choice');
-          beginBulletPhase(5);assert(bulletState.upgradePending,'new run gets new choice');
+          assert(bulletState.upgrades.length===0 && bulletState.reviveCharges===0 && !paused,'new run resets choice');
+          beginBulletPhase(3);assert(bulletState.upgradePending,'new run gets new choice');
           goMenu();assert(bulletUpgradeDialog.hidden && !bulletState.upgradePending,'menu clears modal');
         """)
 
@@ -115,7 +115,7 @@ class BulletUpgradeTests(unittest.TestCase):
         self.start_bullet()
         for width,height in [(390,844),(844,390),(320,568)]:
             self.page.set_viewport_size({'width':width,'height':height})
-            self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport();bulletState.upgrade=null;beginBulletPhase(5);placeFood();clearTimeout(timer)")
+            self.page.evaluate("game.classList.add('fallback-fullscreen');resizeBoardForViewport();bulletState.upgrades=[];bulletState.upgradePhases=[];beginBulletPhase(3);placeFood();clearTimeout(timer)")
             self.check("""
               const panel=bulletUpgradeDialog.querySelector('.upgrade-panel').getBoundingClientRect();
               assert(panel.left>=0 && panel.right<=innerWidth && panel.top>=0 && panel.bottom<=innerHeight,'panel fits screen');

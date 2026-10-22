@@ -18,7 +18,7 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           const classicBest=best,battleRecord=battleBest;let nextColor='green';
           for(let phase=1;phase<=10;phase++){
-            if(bulletState.upgradePending){chooseBulletUpgrade('frost');clearTimeout(timer);}
+            if(bulletState.upgradePending){chooseBulletUpgrade(bulletState.offeredUpgrades[0]);clearTimeout(timer);}
             assert(bulletState.phase===phase,'phase '+phase);
             const expected=phase<=4?5:phase<=7?8:10;
             assert(bulletGoal(phase)===expected,'quota '+phase);
@@ -51,7 +51,7 @@ class BulletHellTests(unittest.TestCase):
     def test_blocked_food_refresh_uses_current_phase_obstacle_density(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(3);bulletState.enemies=[];
+          beginBulletPhase(3);chooseBulletUpgrade('homing');clearTimeout(timer);bulletState.enemies=[];
           obstacles=steps.map(d=>wrap({x:snake[0].x+d.x,y:snake[0].y+d.y}));
           assert(placeFood() && food && !over,'blocked board recovers');
           assert(obstacles.length===bulletState.profile.obstacles,'recovery respects phase density');
@@ -110,7 +110,7 @@ class BulletHellTests(unittest.TestCase):
     def test_cannon_shadow_impact_and_four_fragments(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(3);bulletState.enemies=[];spawnCannonShadow();
+          beginBulletPhase(3);chooseBulletUpgrade('homing');clearTimeout(timer);bulletState.enemies=[];spawnCannonShadow();
           const h=bulletState.hazards[0];assert(h && h.stage==='shadow','shadow is visible first');
           bulletState.nextCannon=Infinity;bulletState.nextRespawn=Infinity;
           gameTime=h.impactAt-1;updateBulletMode();assert(h.stage==='shadow' && bulletState.shots.length===0,'warning window');
@@ -291,7 +291,7 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           for(const phase of [1,4,5,7,8,10,11,12]){
             beginBulletPhase(phase);placeFood();
-            if(bulletState.upgradePending){chooseBulletUpgrade('frost');clearTimeout(timer);}
+            if(bulletState.upgradePending){chooseBulletUpgrade(bulletState.offeredUpgrades[0]);clearTimeout(timer);}
             assert(food.type===chooseFoodType() && (phase===1?food.type==='green':['green','red'].includes(food.type)),'main food follows phase rules '+phase);
             for(const type of ['normal','red','super']){
               food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;collectFood();

@@ -171,7 +171,7 @@ function fitMobileFullscreenBoard(){
   const frameRect=frame.getBoundingClientRect();
   const statusBottom=document.querySelector('.status-bar').getBoundingClientRect().bottom-bounds.top;
   game.style.setProperty('--power-hud-top',`${Math.max(76,statusBottom+10)}px`);
-  const zones=[document.querySelector('.game-head'),document.querySelector('.status-bar'),joystick,...dock.children];
+  const zones=[document.querySelector('.game-head'),document.querySelector('.status-bar'),joystick,...dock.children,document.getElementById('mythicAbilityBtn')].filter(Boolean);
   mobileFoodOcclusions=zones.filter(el=>getComputedStyle(el).display!=='none').map(el=>{
     const b=el.getBoundingClientRect();
     return {left:(b.left-frameRect.left)/bounds.width*COLS-.5,right:(b.right-frameRect.left)/bounds.width*COLS-.5,top:(b.top-frameRect.top)/bounds.height*ROWS-.5,bottom:(b.bottom-frameRect.top)/bounds.height*ROWS-.5};

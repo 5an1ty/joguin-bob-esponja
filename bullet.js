@@ -1,5 +1,5 @@
 // Bullet Hell: clocks use gameTime so pause freezes hazards, warnings and shots.
-const bulletState={upgrade:null,upgradePending:false,reviveCharges:0,reviveUntil:0,reviveNoticeUntil:0,phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
+const bulletState={upgrades:[],upgradePhases:[],offeredUpgrades:[],mythicCharges:0,upgradePending:false,reviveCharges:0,reviveUntil:0,reviveNoticeUntil:0,phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
 let dutchUnlocked=localStorage.getItem('bobSnakeDutchUnlocked')==='true';
 let dutchProjectiles=[];
 const DUTCH_BOSS_HEALTH=10;
@@ -21,7 +21,7 @@ function updateBulletRecord(){
   updateBestDisplay();
 }
 function startBulletMode(){
-  closeBulletUpgrade();bulletState.upgrade=null;bulletState.upgradePending=false;bulletState.reviveCharges=0;bulletState.reviveUntil=0;bulletState.reviveNoticeUntil=0;
+  closeBulletUpgrade();bulletState.upgrades=[];bulletState.upgradePhases=[];bulletState.offeredUpgrades=[];bulletState.mythicCharges=0;bulletState.upgradePending=false;bulletState.reviveCharges=0;bulletState.reviveUntil=0;bulletState.reviveNoticeUntil=0;
   bulletState.phase=1;bulletState.progress=0;bulletState.immunityCount=0;bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];bulletState.phasePending=false;bulletState.bossDefeated=false;
   beginBulletPhase(1);
 }
@@ -51,7 +51,7 @@ function beginBulletPhase(phase){
   for(let i=0;i<bulletState.profile.count;i++)createBulletEnemy(i);
   if(phase===11)createBulletEnemy(0,'dutch');
   sceneCacheKey='';refreshSpeed();
-  if(phase===5 && !bulletState.upgrade)showBulletUpgrade();
+  if([3,6,9].includes(phase) && !bulletState.upgradePhases.includes(phase))showBulletUpgrade();
 }
 function chooseBulletFood(){return bulletState.nextFood;}
 function collectBulletFood(){
@@ -63,8 +63,9 @@ function collectBulletFood(){
   if(foodTypes[type]?.duration && (hasPower(type)||activePowerTypes().length<MAX_ACTIVE_POWERS))powers[type]=gameTime+foodTypes[type].duration;
   refreshSpeed();
   if(type==='red'){
-    const target=laserTarget();
-    if(target){beam={from:{...snake[0]},to:{...target},until:gameTime+400};playEffect('laser');damageBulletEnemy(target,1,3000);}
+    const target=hasBulletUpgrade('laser')?(nearestBulletPlankton()||laserTarget()):laserTarget();
+    if(target && hasBulletUpgrade('laser'))fireBulletPiercingLaser(target);
+    else if(target){beam={from:{...snake[0]},to:{...target},until:gameTime+400};playEffect('laser');damageBulletEnemy(target,1,3000);}
   }
   if(type==='green')emitFourShots(eaten,'green');
   if(!bonus && (type==='green' || type==='red'))bulletState.nextFood=type==='green'?'red':'green';
@@ -174,13 +175,13 @@ function updateShotList(shots){
   for(const shot of shots){
     if(shot.dead)continue;
     const dt=Math.max(0,(gameTime-shot.lastAt)/1000);shot.lastAt=gameTime;
-    if(shot.owner==='green' && bulletState.upgrade==='homing')steerBulletHoming(shot,dt);
+    if(shot.owner==='green' && hasBulletUpgrade('homing'))steerBulletHoming(shot,dt);
     shot.px=shot.x;shot.py=shot.y;shot.x+=shot.dx*shot.speed*dt;shot.y+=shot.dy*shot.speed*dt;
     if(gameTime>=shot.until){shot.dead=true;continue;}
     const a={x:shot.px,y:shot.py},b=shot;
-    if(shot.owner==='green' || shot.owner==='dutch'){
+    if(shot.owner==='green' || shot.owner==='dutch' || shot.owner==='mythic'){
       const hits=activeEnemies().filter(enemy=>segmentDistance(enemy,a,b)<.65).map(enemy=>({enemy,d:Math.hypot(enemy.x-a.x,enemy.y-a.y)}));
-      const rocks=shot.owner==='dutch'?obstacles.filter(rock=>segmentDistance(rock,a,b)<.65).map(rock=>({rock,d:Math.hypot(rock.x-a.x,rock.y-a.y)})):[];
+      const rocks=shot.owner==='dutch' || shot.owner==='mythic'?obstacles.filter(rock=>segmentDistance(rock,a,b)<.65).map(rock=>({rock,d:Math.hypot(rock.x-a.x,rock.y-a.y)})):[];
       if(shot.owner==='green'){
         // Remember enemy objects so overlapping frames cannot damage the same target twice.
         shot.hitEnemies ??= new Set();
@@ -196,7 +197,7 @@ function updateShotList(shots){
         if(first.rock){obstacles=obstacles.filter(o=>o!==first.rock);sceneCacheKey='';}
         else if(gameMode==='classic' && first.enemy===plankton){
           plankton.hits++;if(plankton.hits>=enemyMaxHealth(plankton)){plankton=null;addScore(50);}
-        }else damageBattleEnemy(first.enemy,shot.owner==='green' && first.enemy.kind!=='dutch'?2:1,0);
+        }else damageBattleEnemy(first.enemy,shot.owner==='mythic'?2:1,0);
         shot.dead=true;
       }
     }else if(segmentDistance(snake[0],a,b)<.6){
@@ -216,6 +217,7 @@ function updateDutchProjectiles(){
   updateShotList(dutchProjectiles);dutchProjectiles=dutchProjectiles.filter(s=>!s.dead);
 }
 function updateBulletHud(){
+  updateMythicButton();
   const goal=bulletGoal(bulletState.phase);
   document.getElementById('level').textContent=String(bulletState.phase);
   const boss=bulletState.enemies.find(e=>e.kind==='dutch');
@@ -234,7 +236,7 @@ function updateBulletHud(){
   const notice=document.getElementById('bulletNotice');
   if(notice){
     notice.hidden=bulletState.noticeUntil<=gameTime && bulletState.reviveNoticeUntil<=gameTime;
-    notice.textContent=bulletState.reviveNoticeUntil>gameTime?'Salva-vidas! Você voltou com 5s de imunidade.':bulletState.bossDefeated && bulletState.phase===12?'Holandês desbloqueado! O desafio infinito começou.':bulletState.phase===11?'O Holandês Voador chegou! Derrote o chefe.':`Fase ${bulletState.phase} · ${goal} hambúrgueres verdes para avançar`;
+    notice.textContent=bulletState.reviveNoticeUntil>gameTime?(bulletState.protectionNotice||'Salva-vidas! Você voltou com 5s de imunidade.'):bulletState.bossDefeated && bulletState.phase===12?'Holandês desbloqueado! O desafio infinito começou.':bulletState.phase===11?'O Holandês Voador chegou! Derrote o chefe.':`Fase ${bulletState.phase} · ${goal} hambúrgueres verdes para avançar`;
   }
 }
 function drawDutchSprite(x,y,head=true){
@@ -288,8 +290,8 @@ function drawBulletWorld(alpha=1,now=performance.now()){
 function drawBulletShot(shot,alpha,now){
   const x=(shot.px+(shot.x-shot.px)*alpha)*CELL+10,y=(shot.py+(shot.y-shot.py)*alpha)*CELL+10;
   ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(shot.dy,shot.dx));
-  const friendly=shot.owner==='green'||shot.owner==='dutch';
-  ctx.strokeStyle=friendly?'#c4ffe1':'#ffc9a2';ctx.fillStyle=friendly?'#47eb9c':shot.owner==='boss'?'#6bf5be':'#f16e44';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=7;
+  const friendly=shot.owner==='green'||shot.owner==='dutch'||shot.owner==='mythic';
+  ctx.strokeStyle=friendly?'#c4ffe1':'#ffc9a2';ctx.fillStyle=shot.owner==='mythic'?'#c37aff':friendly?'#47eb9c':shot.owner==='boss'?'#6bf5be':'#f16e44';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=7;
   ctx.globalAlpha=.45;ctx.beginPath();ctx.ellipse(-5,0,7+2*Math.sin(gameTime/80),3,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
   ctx.beginPath();ctx.arc(0,0,4,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.fillRect(-1,-2,2,2);ctx.restore();
 }
@@ -326,8 +328,8 @@ function tryBulletRevive(){
   if(bulletState.reviveCharges<1 || paused)return false;
   bulletState.reviveCharges--;
   bulletState.reviveUntil=gameTime+5000;bulletState.reviveNoticeUntil=gameTime+3000;
-  powers.immunity=bulletState.reviveUntil;
-  bulletState.shots=bulletState.shots.filter(s=>s.owner==='green');bulletState.hazards=[];
+  powers.immunity=bulletState.reviveUntil;bulletState.protectionNotice='Salva-vidas! Você voltou com 5s de imunidade.';
+  bulletState.shots=bulletState.shots.filter(s=>s.owner==='green' || s.owner==='mythic');bulletState.hazards=[];
   snake=snake.slice(0,INITIAL_SNAKE_LENGTH);previousSnake=snake.map(p=>({...p}));lastVisualPositions=[];
   clearPadPointer();clearCanvasDrag();resetMobileInput();
   playEffect('super');updateStatus();draw();return true;
@@ -335,14 +337,20 @@ function tryBulletRevive(){
 const bulletUpgradeChoices=[
   {id:'frost',name:'Frio que queima',image:'assets/upgrade-frost.svg',text:'O sopro passa a dar 3 de dano no primeiro inimigo e 2 de dano nos de trás.'},
   {id:'homing',name:'Hambúrguer teleguiado',image:'assets/upgrade-homing.svg',text:'Os tiros do hambúrguer verde perseguem o Plankton mais próximo.'},
-  {id:'revive',name:'Salva-vidas',image:'assets/upgrade-revive.svg',text:'Ressuscita 1 vez caso você perca toda a vida. Ao voltar, você fica imune por 5 segundos.'}
+  {id:'revive',name:'Salva-vidas',image:'assets/upgrade-revive.svg',text:'Ressuscita 1 vez caso você perca toda a vida. Ao voltar, você fica imune por 5 segundos.'},
+  {id:'laser',name:'Laser perfurante',image:'assets/upgrade-laser.svg',hint:'Ativa ao coletar o hambúrguer vermelho.',text:'Dispara um laser em linha reta na direção do Plankton que atravessa todos os alvos.'},
+  {id:'luck',name:'Amuleto da sorte',image:'assets/upgrade-luck.svg',text:'20% de chance de ignorar um dano recebido e ficar intangível por 4 segundos.'},
+  {id:'mythic',name:'Saraivada fantasmagórica',image:'assets/upgrade-mythic.svg',hint:'Ative pelo botão Saraivada ou pela tecla V.',text:'Lança uma tempestade de balas roxas que destroem obstáculos e causam 2 de dano aos inimigos. (1 uso por partida)',mythic:true}
 ];
 const bulletUpgradeDialog=document.createElement('div');
 bulletUpgradeDialog.id='bulletUpgradeDialog';bulletUpgradeDialog.hidden=true;
 bulletUpgradeDialog.setAttribute('role','dialog');bulletUpgradeDialog.setAttribute('aria-modal','true');bulletUpgradeDialog.setAttribute('aria-labelledby','bulletUpgradeTitle');
-bulletUpgradeDialog.innerHTML=`<section class="upgrade-panel"><span class="upgrade-level">Fase 5</span><h2 id="bulletUpgradeTitle">Escolha seu upgrade</h2><p>Um poder extra para o resto da aventura. Escolha um!</p><div class="upgrade-options">${bulletUpgradeChoices.map(c=>`<button type="button" class="upgrade-card" data-upgrade="${c.id}"><img src="${c.image}" alt="" width="240" height="130"><strong>${c.name}</strong><span>${c.text}</span></button>`).join('')}</div><small>A partida continua assim que você escolher.</small></section>`;
+bulletUpgradeDialog.innerHTML='<section class="upgrade-panel"><span class="upgrade-level"></span><h2 id="bulletUpgradeTitle">Escolha seu upgrade</h2><p>Os poderes escolhidos se acumulam nesta aventura!</p><div class="upgrade-options"></div><small>A partida continua assim que você escolher.</small></section>';
 game.append(bulletUpgradeDialog);
-bulletUpgradeDialog.querySelectorAll('[data-upgrade]').forEach(button=>button.addEventListener('click',()=>chooseBulletUpgrade(button.dataset.upgrade)));
+bulletUpgradeDialog.addEventListener('click',event=>{
+  const button=event.target.closest('[data-upgrade]');
+  if(button)chooseBulletUpgrade(button.dataset.upgrade);
+});
 bulletUpgradeDialog.addEventListener('keydown',event=>{
   if(event.key!=='Tab')return;
   const buttons=[...bulletUpgradeDialog.querySelectorAll('button')],index=buttons.indexOf(document.activeElement);
@@ -352,17 +360,86 @@ function closeBulletUpgrade(){
   bulletUpgradeDialog.hidden=true;
 }
 function showBulletUpgrade(){
-  if(bulletState.upgrade || bulletState.upgradePending)return;
+  if(bulletState.upgradePending || bulletState.upgradePhases.includes(bulletState.phase))return;
+  bulletState.offeredUpgrades=rollBulletUpgradeOffers(bulletState.phase);
+  if(!bulletState.offeredUpgrades.length)return;
+  bulletUpgradeDialog.querySelector('.upgrade-level').textContent=`Fase ${bulletState.phase} · Escolha ${bulletState.upgrades.length+1}/3`;
+  bulletUpgradeDialog.querySelector('.upgrade-options').innerHTML=bulletState.offeredUpgrades.map(id=>{const c=bulletUpgradeChoices.find(c=>c.id===id);return `<button type="button" class="upgrade-card${c.mythic?' mythic-card':''}" data-upgrade="${c.id}">${c.mythic?'<span class="mythic-tag">MÍTICO</span>':''}<img src="${c.image}" alt="" width="240" height="130"><strong>${c.name}</strong><span>${c.text}</span>${c.hint?`<small class="upgrade-hint">${c.hint}</small>`:''}</button>`;}).join('');
   if(!paused)togglePause();
   bulletState.upgradePending=true;
   overlay.classList.add('hidden');bulletUpgradeDialog.hidden=false;
   bulletUpgradeDialog.querySelector('button').focus();
 }
 function chooseBulletUpgrade(id){
-  if(!bulletState.upgradePending || !bulletUpgradeChoices.some(c=>c.id===id))return false;
-  bulletState.upgrade=id;bulletState.reviveCharges=id==='revive'?1:0;
+  if(!bulletState.upgradePending || !bulletState.offeredUpgrades.includes(id) || hasBulletUpgrade(id))return false;
+  bulletState.upgrades.push(id);bulletState.upgradePhases.push(bulletState.phase);
+  if(id==='revive')bulletState.reviveCharges=1;
+  if(id==='mythic')bulletState.mythicCharges=1;
   bulletState.upgradePending=false;closeBulletUpgrade();
   if(paused)togglePause();
   document.getElementById('topPauseBtn').focus({preventScroll:true});
-  playEffect('karateReady');return true;
+  updateStatus();playEffect('karateReady');return true;
 }
+
+function hasBulletUpgrade(id){return bulletState.upgrades.includes(id);}
+function rollBulletUpgradeOffers(phase,random=Math.random){
+  const base=['frost','homing','revive'],fresh=['laser','luck'];
+  const unowned=ids=>ids.filter(id=>!hasBulletUpgrade(id));
+  const pick=ids=>ids.splice(Math.floor(random()*ids.length),1)[0];
+  if(phase===3)return unowned(base);
+  if(phase===6){
+    const newCard=!hasBulletUpgrade('mythic') && random()<.1?'mythic':pick(unowned(fresh));
+    return [...unowned(base),newCard].slice(0,3);
+  }
+  if(phase===9){
+    const available=unowned([...base,...fresh]);
+    const result=!hasBulletUpgrade('mythic') && random()<.1?['mythic']:[];
+    while(result.length<3 && available.length)result.push(pick(available));
+    return result;
+  }
+  return [];
+}
+function nearestBulletPlankton(){
+  return bulletState.enemies.filter(e=>e.kind!=='dutch').sort((a,b)=>torusDistance(a,snake[0])-torusDistance(b,snake[0]))[0];
+}
+function fireBulletPiercingLaser(target){
+  const head=snake[0],vx=target.x-head.x,vy=target.y-head.y,length=Math.hypot(vx,vy)||1,dx=vx/length,dy=vy/length;
+  const reach=Math.min(dx>0?(COLS-.5-head.x)/dx:dx<0?(-.5-head.x)/dx:Infinity,dy>0?(ROWS-.5-head.y)/dy:dy<0?(-.5-head.y)/dy:Infinity);
+  if(!Number.isFinite(reach))return;
+  const to={x:head.x+dx*reach,y:head.y+dy*reach};
+  beam={from:{...head},to,until:gameTime+450,piercing:true};playEffect('laser');
+  for(const enemy of [...bulletState.enemies]){
+    const projection=(enemy.x-head.x)*dx+(enemy.y-head.y)*dy;
+    if(projection>=0 && projection<=reach && segmentDistance(enemy,head,to)<.65)damageBulletEnemy(enemy,1,3000);
+  }
+}
+function tryBulletDamageProtection(){
+  if(bulletState.reviveUntil>gameTime || hasPower('luck'))return true;
+  if(!paused && hasBulletUpgrade('luck') && Math.random()<.2){
+    powers.luck=gameTime+4000;bulletState.protectionNotice='Amuleto da sorte! Intangível por 4s.';bulletState.reviveNoticeUntil=gameTime+2500;
+    playEffect('lucky');updateStatus();return true;
+  }
+  return tryBulletRevive();
+}
+const mythicAbilityButton=document.createElement('button');mythicAbilityButton.id='mythicAbilityBtn';mythicAbilityButton.type='button';mythicAbilityButton.hidden=true;
+mythicAbilityButton.textContent='Saraivada · 1 uso';mythicAbilityButton.title='Saraivada fantasmagórica · Tecla V';mythicAbilityButton.setAttribute('aria-label','Ativar Saraivada fantasmagórica. Um uso por partida. Tecla V.');
+mythicAbilityButton.addEventListener('click',useBulletMythic);game.append(mythicAbilityButton);
+function updateMythicButton(){
+  const hidden=gameMode!=='bullet' || bulletState.mythicCharges<1 || paused || over;
+  const changed=mythicAbilityButton.hidden!==hidden;mythicAbilityButton.hidden=hidden;mythicAbilityButton.disabled=paused || over;
+  if(changed && typeof resizeBoardForViewport==='function')requestAnimationFrame(()=>{if(isFullscreen())resizeBoardForViewport();});
+}
+function useBulletMythic(){
+  if(gameMode!=='bullet' || paused || over || !menu.classList.contains('hidden') || bulletState.mythicCharges<1)return false;
+  bulletState.mythicCharges--;
+  const add=(x,y,dx,dy)=>bulletState.shots.push({x,y,px:x,py:y,dx,dy,owner:'mythic',speed:12,lastAt:gameTime,until:gameTime+6000});
+  for(let i=0;i<24;i++){const angle=i*Math.PI/12;add(snake[0].x,snake[0].y,Math.cos(angle),Math.sin(angle));}
+  for(let i=0;i<8;i++){
+    const x=(i+.5)*COLS/8,y=(i+.5)*ROWS/8;
+    add(x,0,0,1);add(x,ROWS-1,0,-1);add(0,y,1,0);add(COLS-1,y,-1,0);
+  }
+  playEffect('mythic');updateStatus();return true;
+}
+document.addEventListener('keydown',event=>{
+  if(event.key.toLowerCase()==='v' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey){event.preventDefault();useBulletMythic();}
+});

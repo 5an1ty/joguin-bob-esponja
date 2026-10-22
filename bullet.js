@@ -41,7 +41,8 @@ function createBulletEnemy(index,kind='plankton'){
 }
 function beginBulletPhase(phase){
   bulletState.phase=phase;bulletState.progress=0;bulletState.immunityCount=0;bulletState.profile=bulletProfile(phase);bulletState.phasePending=false;
-  bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];bulletState.nextFood='green';
+  bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];
+  if(phase<=11)bulletState.nextFood='green';
   bulletState.nextCannon=gameTime+1500;bulletState.nextRespawn=gameTime+6500;bulletState.noticeUntil=gameTime+1800;
   bulletState.bonusFoods=[];bulletState.mainFood=null;
   scenePhase=phase-1;obstaclePhase=phase-1;obstacles=[];
@@ -56,7 +57,7 @@ function collectBulletFood(){
   const eaten={...food},type=eaten.type||'normal';
   const bonus=bulletState.bonusFoods.some(f=>f.id===eaten.id);
   if(bonus){bulletState.bonusFoods=bulletState.bonusFoods.filter(f=>f.id!==eaten.id);food=bulletState.mainFood;}
-  playEffect(type==='normal'?'collect':type==='green'?'collect':type);
+  playEffect(type==='normal'?'collect':type);
   if(foodTypes[type]?.duration && (hasPower(type)||activePowerTypes().length<MAX_ACTIVE_POWERS))powers[type]=gameTime+foodTypes[type].duration;
   refreshSpeed();
   if(type==='red'){
@@ -64,7 +65,7 @@ function collectBulletFood(){
     if(target){beam={from:{...snake[0]},to:{...target},until:gameTime+400};playEffect('laser');damageBulletEnemy(target,1,3000);}
   }
   if(type==='green')emitFourShots(eaten,'green');
-  if(!bonus)bulletState.nextFood='green';
+  if(!bonus && (type==='green' || type==='red'))bulletState.nextFood=bulletState.phase>=11 && type==='green'?'red':'green';
   bulletState.immunityCount++;
   if(bulletState.immunityCount>=3){bulletState.immunityCount=0;powers.immunity=gameTime+3000;playEffect('super');}
   if(type==='green')bulletState.progress++;

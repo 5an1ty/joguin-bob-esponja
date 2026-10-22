@@ -943,6 +943,7 @@ function pararMusica() {
 
 // Efeitos sintetizados originais: cada poder tem sua própria assinatura sonora.
 const effectNotes = {
+  green:[{type:'sine',from:740,to:260,time:.48,at:0},{type:'sine',from:1110,to:390,time:.42,at:.07},{type:'triangle',from:370,to:185,time:.35,at:.12}],
   cannonFall:[{type:'sine',from:1100,to:170,time:.55,at:0},{type:'noise',from:1,to:.35,time:.2,at:.28}],
   cannonBurst:[{type:'noise',from:1,to:.2,time:.25,at:0},{type:'sine',from:160,to:38,time:.3,at:0},{type:'triangle',from:850,to:240,time:.12,at:.04}],
   dutchShot:[{type:'sawtooth',from:680,to:95,time:.18,at:0},{type:'sine',from:1300,to:360,time:.25,at:.035}],

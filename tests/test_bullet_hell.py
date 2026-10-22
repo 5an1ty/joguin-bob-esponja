@@ -72,21 +72,32 @@ class BulletHellTests(unittest.TestCase):
           assert(!hasPower('super') && currentSpeed===speed,'immunity and turbo expire together');
         """)
 
-    def test_exclusively_green_food_in_boss_and_infinite(self):
+    def test_strict_green_red_alternation_boss_bonus_and_infinite_transitions(self):
         self.start_bullet()
         self.check("""
-          beginBulletPhase(11);placeFood();
+          beginBulletPhase(11);placeFood();obstacles=[];
           for(let i=0;i<8;i++){
-            const type='green';assert(food.type===type,'only green main food '+i);
+            const type=i%2===0?'green':'red';assert(food.type===type,'strict alternation '+i);
             food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;
             collectFood();clearTimeout(timer);
-            assert(bulletState.progress===i+1,'only green counts');
+            assert(bulletState.progress===Math.floor(i/2)+1,'only green counts');
             assert(bulletState.phase===11,'food alone does not win boss phase');
+            if(i===0){
+              const main=food;
+              abilityReadyAt=0;assert(useAbility(),'Bob creates yellow bonus');
+              food=bulletState.bonusFoods[0];collectFood();
+              assert(food===main && food.type==='red' && chooseBulletFood()==='red','yellow never consumes alternating main spawn');
+              assert(bulletState.progress===1,'yellow does not progress');
+            }
           }
-          assert(bulletState.shots.filter(s=>s.owner==='green').length===32,'four shots for each green collection');
-          beginBulletPhase(12);placeFood();const speed=currentSpeed;
-          food={...snake[0],type:'red',id:++foodSerial};bulletState.mainFood=food;collectFood();
-          assert(bulletState.progress===0 && currentSpeed===speed,'red not progress in infinite');
+          assert(bulletState.shots.filter(s=>s.owner==='green').length===16,'four shots per collected green');
+          beginBulletPhase(12);placeFood();
+          for(let i=0;i<40;i++){
+            const type=i%2===0?'green':'red';assert(food.type===type,'alternation survives infinite phase changes '+i);
+            food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;
+            collectFood();clearTimeout(timer);
+          }
+          assert(bulletState.phase===14,'only greens advance infinite phases');
         """)
 
     def test_cannon_shadow_impact_and_four_fragments(self):
@@ -273,13 +284,13 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           for(const phase of [1,4,5,7,8,10,11,12]){
             beginBulletPhase(phase);placeFood();
-            assert(food.type==='green' && chooseFoodType()==='green','green main food phase '+phase);
+            assert(food.type===chooseFoodType() && (phase<=11?food.type==='green':['green','red'].includes(food.type)),'main food follows phase rules '+phase);
             for(const type of ['normal','red','super']){
               food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;collectFood();
               assert(bulletState.progress===0,'non-green never progresses phase '+phase);
             }
             food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();
-            assert(bulletState.progress===1 && food.type==='green','only green progresses and respawns');
+            assert(bulletState.progress===1 && food.type===(phase>=11?'red':'green'),'only green progresses and next main color follows phase rules');
           }
           for(const mode of ['classic','battle']){
             gameMode=mode;plankton=null;battleEnemies=[];powers={};battleRewards=0;
@@ -307,4 +318,31 @@ class BulletHellTests(unittest.TestCase):
           assert(second.hits===2 && !shot.dead,'next frame cannot hit same enemy twice');
           gameTime+=500;updateShotList([shot]);
           assert(boss.hits===1 && shot.dead && behind.hits===0,'boss takes exactly 1 hp and blocks further travel');
+        """)
+
+    def test_green_collection_uses_distinct_ghostly_sound_and_obeys_mute(self):
+        self.start_bullet()
+        self.check("""
+          const events=[],original=playEffect;playEffect=k=>events.push(k);
+          try{
+            food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;
+            collectFood();
+            assert(events.includes('green') && !events.includes('collect'),'green has its own ghostly cue');
+            assert(effectNotes.green.length>=2 && effectNotes.green!==effectNotes.ghost,'layered original collection sound');
+          }finally{playEffect=original;}
+          stopEffects();effectsMuted=true;playEffect('green');
+          assert(activeEffects.size===0,'effects mute silences green cue');
+          effectsMuted=false;allMuted=true;playEffect('green');
+          assert(activeEffects.size===0,'master mute silences green cue');
+        """)
+
+    def test_boss_defeat_preserves_pending_red_spawn(self):
+        self.start_bullet()
+        self.check("""
+          beginBulletPhase(11);placeFood();
+          food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();
+          assert(food.type==='red','green is followed by red');
+          const boss=bulletState.enemies.find(e=>e.kind==='dutch');
+          damageBulletEnemy(boss,DUTCH_BOSS_HEALTH,0);updateBulletMode();
+          assert(bulletState.phase===12 && food.type==='red','boss victory cannot reset pending color to green');
         """)

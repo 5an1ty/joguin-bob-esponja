@@ -86,3 +86,8 @@ no repositório. A geração automatizada não substitui teste em aparelho Andro
 GitHub Pages publica a branch `main` e disponibiliza a landing em `/docs/`.
 Netlify continua servindo `dist/` com o jogo. Não há workflow adicional de Pages
 para disputar a publicação automática já configurada no repositório.
+
+A verificação Android em `FullscreenSmoke` usa toques reais na WebView do
+emulador API 35 para entrar em tela cheia, girar para horizontal, conferir
+viewport/insets e sair da tela cheia. Capturas ficam no artefato
+`android-fullscreen-check` do workflow.

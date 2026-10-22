@@ -40,9 +40,9 @@ python3 -m unittest discover -s tests -v
 
 - Clássico: exploração e perseguições do Plankton.
 - Batalha: ondas de inimigos e habilidades de personagem.
-- Bullet Hell: fases 1–4 com 5 hambúrgueres por fase, fases 5–7 com 8 e fases 8–10 com 10. A velocidade muda somente ao avançar de fase. Cada 3 hambúrgueres dão 3 segundos de imunidade, com contador reiniciado na transição. Sombras anunciam canhões que disparam em quatro direções.
+- Bullet Hell: fases 1–4 com 5 hambúrgueres por fase, fases 5–7 com 8 e fases 8–10 com 10. A velocidade base muda somente ao avançar de fase; o hambúrguer amarelo concede imunidade e turbo juntos durante 6 segundos. Cada 3 hambúrgueres dão 3 segundos de imunidade, com contador reiniciado na transição. Sombras anunciam canhões que disparam em quatro direções.
 
-Na fase 11, derrote o Holandês Voador para desbloqueá-lo e entrar no infinito. Não existe cota de verdes para vencer o chefe: a vitória depende exclusivamente de derrotá-lo. Da fase 11 em diante, a coleta principal é exclusivamente verde, e somente verdes contam no progresso; ao serem coletados, verdes disparam quatro projéteis (2 de dano em Planktons, 1 no chefe). A partir da fase 12, cada 10 verdes avançam uma nova fase infinita.
+Na fase 11, derrote o Holandês Voador para desbloqueá-lo e entrar no infinito. Não existe cota de verdes para vencer o chefe: a vitória depende exclusivamente de derrotá-lo. Em todas as fases do Bullet Hell, a coleta principal é exclusivamente verde, e somente verdes contam no progresso; ao serem coletados, verdes disparam quatro projéteis (2 de dano por Plankton, atravessando-os sem repetir o dano; 1 no chefe). A partir da fase 12, cada 10 verdes avançam uma nova fase infinita.
 
 O Holandês jogável atravessa a própria cauda. Sua habilidade dispara na direção atual, destrói o primeiro obstáculo atingido ou causa 1 de dano em inimigos, com recarga de 15 segundos. O desbloqueio e os recordes são salvos no navegador. As trilhas fornecidas ficam em `musicas/bgm_bullet_mode.mp3` e `musicas/bgm_bullet_boss.mp3`.
 

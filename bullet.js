@@ -1,5 +1,5 @@
 // Bullet Hell: clocks use gameTime so pause freezes hazards, warnings and shots.
-const bulletState={phase:1,progress:0,immunityCount:0,nextFood:'normal',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
+const bulletState={phase:1,progress:0,immunityCount:0,nextFood:'green',bonusFoods:[],mainFood:null,enemies:[],hazards:[],shots:[],profile:null,nextCannon:0,nextRespawn:0,bossDefeated:false,phasePending:false,best:Number(localStorage.getItem('bobSnakeBulletBest')||0),noticeUntil:0};
 let dutchUnlocked=localStorage.getItem('bobSnakeDutchUnlocked')==='true';
 let dutchProjectiles=[];
 const DUTCH_BOSS_HEALTH=10;
@@ -41,7 +41,7 @@ function createBulletEnemy(index,kind='plankton'){
 }
 function beginBulletPhase(phase){
   bulletState.phase=phase;bulletState.progress=0;bulletState.immunityCount=0;bulletState.profile=bulletProfile(phase);bulletState.phasePending=false;
-  bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];bulletState.nextFood=phase>=11?'green':'normal';
+  bulletState.enemies=[];bulletState.hazards=[];bulletState.shots=[];bulletState.nextFood='green';
   bulletState.nextCannon=gameTime+1500;bulletState.nextRespawn=gameTime+6500;bulletState.noticeUntil=gameTime+1800;
   bulletState.bonusFoods=[];bulletState.mainFood=null;
   scenePhase=phase-1;obstaclePhase=phase-1;obstacles=[];
@@ -58,15 +58,16 @@ function collectBulletFood(){
   if(bonus){bulletState.bonusFoods=bulletState.bonusFoods.filter(f=>f.id!==eaten.id);food=bulletState.mainFood;}
   playEffect(type==='normal'?'collect':type==='green'?'collect':type);
   if(foodTypes[type]?.duration && (hasPower(type)||activePowerTypes().length<MAX_ACTIVE_POWERS))powers[type]=gameTime+foodTypes[type].duration;
+  refreshSpeed();
   if(type==='red'){
     const target=laserTarget();
     if(target){beam={from:{...snake[0]},to:{...target},until:gameTime+400};playEffect('laser');damageBulletEnemy(target,1,3000);}
   }
   if(type==='green')emitFourShots(eaten,'green');
-  if(!bonus)bulletState.nextFood=bulletState.phase>=11?'green':(type==='red'?'normal':'red');
+  if(!bonus)bulletState.nextFood='green';
   bulletState.immunityCount++;
   if(bulletState.immunityCount>=3){bulletState.immunityCount=0;powers.immunity=gameTime+3000;playEffect('super');}
-  if(bulletState.phase<=10 || type==='green')bulletState.progress++;
+  if(type==='green')bulletState.progress++;
   addScore(10);
   if(++battleBurgers>=10){battleBurgers=0;releaseFrostBreath();}
   if(bulletState.phase<=10 && bulletState.progress>=bulletGoal(bulletState.phase) || bulletState.phase>11 && bulletState.progress>=bulletGoal(bulletState.phase))bulletState.phasePending=true;
@@ -172,7 +173,17 @@ function updateShotList(shots){
     if(shot.owner==='green' || shot.owner==='dutch'){
       const hits=activeEnemies().filter(enemy=>segmentDistance(enemy,a,b)<.65).map(enemy=>({enemy,d:Math.hypot(enemy.x-a.x,enemy.y-a.y)}));
       const rocks=shot.owner==='dutch'?obstacles.filter(rock=>segmentDistance(rock,a,b)<.65).map(rock=>({rock,d:Math.hypot(rock.x-a.x,rock.y-a.y)})):[];
-      const first=[...hits,...rocks].sort((x,y)=>x.d-y.d)[0];
+      if(shot.owner==='green'){
+        // Remember enemy objects so overlapping frames cannot damage the same target twice.
+        shot.hitEnemies ??= new Set();
+        for(const {enemy} of hits.sort((x,y)=>x.d-y.d)){
+          if(shot.hitEnemies.has(enemy))continue;
+          shot.hitEnemies.add(enemy);
+          damageBattleEnemy(enemy,enemy.kind==='dutch'?1:2,0);
+          if(enemy.kind==='dutch'){shot.dead=true;break;}
+        }
+      }
+      const first=shot.owner==='green'?null:[...hits,...rocks].sort((x,y)=>x.d-y.d)[0];
       if(first){
         if(first.rock){obstacles=obstacles.filter(o=>o!==first.rock);sceneCacheKey='';}
         else if(gameMode==='classic' && first.enemy===plankton){
@@ -215,7 +226,7 @@ function updateBulletHud(){
   const notice=document.getElementById('bulletNotice');
   if(notice){
     notice.hidden=bulletState.noticeUntil<=gameTime;
-    notice.textContent=bulletState.bossDefeated && bulletState.phase===12?'Holandês desbloqueado! O desafio infinito começou.':bulletState.phase===11?'O Holandês Voador chegou! Derrote o chefe.':`Fase ${bulletState.phase} · ${goal} ${bulletState.phase>11?'hambúrgueres verdes':'hambúrgueres'} para avançar`;
+    notice.textContent=bulletState.bossDefeated && bulletState.phase===12?'Holandês desbloqueado! O desafio infinito começou.':bulletState.phase===11?'O Holandês Voador chegou! Derrote o chefe.':`Fase ${bulletState.phase} · ${goal} hambúrgueres verdes para avançar`;
   }
 }
 function drawDutchSprite(x,y,head=true){

@@ -451,7 +451,7 @@ function scheduleTick(delay = Math.max(1,currentSpeed-(performance.now()-lastMov
 function refreshSpeed() {
   if(tutorialSlowdown || playableTutorial?.explained)return;
   const base = gameMode==='bullet' ? bulletState.profile.snakeSpeed : Math.max(40, settings[difficulty].speed * Math.pow(0.95, gameMode==='battle'?0:scenePhase));
-  const speed = (hasPower('super') && gameMode!=='bullet' ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1) * movementGuideSpeed();
+  const speed = (hasPower('super') ? Math.max(25, base * 0.55) : base) * (mobileGameplay ? 1.3 : 1) * movementGuideSpeed();
   if (speed !== currentSpeed) {
     currentSpeed = speed;
     clearInterval(timer);

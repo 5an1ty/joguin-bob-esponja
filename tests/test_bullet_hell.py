@@ -59,11 +59,17 @@ class BulletHellTests(unittest.TestCase):
           eat();assert(powers.immunity===gameTime+3000 && isInvulnerable(),'three second shield');
           gameTime=powers.immunity+1;assert(!isInvulnerable(),'shield expires');
           beginBulletPhase(11);placeFood();obstacles=[];
-          const speed=currentSpeed,main=food,next=bulletState.nextFood;
+          const speed=currentSpeed,main=food,next=bulletState.nextFood,enemyPace=bulletState.profile.enemyInterval;
           abilityReadyAt=0;assert(useAbility(),'Bob works');
           assert(food===main && bulletState.nextFood===next && mapFoods().length===2,'bonus does not replace primary');
+          const progress=bulletState.progress;
           food=bulletState.bonusFoods[0];collectFood();refreshSpeed();
-          assert(food===main && bulletState.nextFood===next && currentSpeed===speed,'yellow power does not accelerate Bullet Hell or disturb sequence');
+          assert(food===main && bulletState.nextFood===next && currentSpeed===Math.max(25,bulletState.profile.snakeSpeed*.55)*(mobileGameplay?1.3:1),'yellow immunity and turbo preserve main food');
+          assert(isInvulnerable() && powers.super===gameTime+foodTypes.super.duration,'yellow grants immunity for configured duration');
+          assert(bulletState.progress===progress,'yellow never progresses phase');
+          assert(bulletState.profile.enemyInterval===enemyPace,'yellow accelerates player only');
+          gameTime=powers.super;refreshSpeed();
+          assert(!hasPower('super') && currentSpeed===speed,'immunity and turbo expire together');
         """)
 
     def test_exclusively_green_food_in_boss_and_infinite(self):
@@ -260,4 +266,45 @@ class BulletHellTests(unittest.TestCase):
           for(const key of ['cannonFall','cannonBurst','dutchShot','barrageWarning'])assert(effectNotes[key]?.length>0,'new synthesized '+key);
           gameMode='classic';updateStatus();
           assert(getComputedStyle(document.getElementById('bulletProgressHud')).display==='none','no Bullet bars in other modes');
+        """)
+
+    def test_only_green_advances_every_phase_and_stays_exclusive_to_bullet(self):
+        self.start_bullet()
+        self.check("""
+          for(const phase of [1,4,5,7,8,10,11,12]){
+            beginBulletPhase(phase);placeFood();
+            assert(food.type==='green' && chooseFoodType()==='green','green main food phase '+phase);
+            for(const type of ['normal','red','super']){
+              food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;collectFood();
+              assert(bulletState.progress===0,'non-green never progresses phase '+phase);
+            }
+            food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();
+            assert(bulletState.progress===1 && food.type==='green','only green progresses and respawns');
+          }
+          for(const mode of ['classic','battle']){
+            gameMode=mode;plankton=null;battleEnemies=[];powers={};battleRewards=0;
+            for(let i=0;i<20;i++)assert(chooseFoodType(i/20,i/20)!=='green','green exclusive to Bullet Hell');
+          }
+        """)
+
+    def test_green_projectiles_pierce_multiple_enemies_once_and_stop_at_boss(self):
+        self.start_bullet()
+        self.check("""
+          beginBulletPhase(11);obstacles=[];
+          snake=[{x:1,y:1}];previousSnake=snake.map(p=>({...p}));
+          const make=(x,kind='plankton')=>({x,y:5,kind,aggression:1,hits:0,maxHealth:10,stunnedUntil:0,nextMoveAt:Infinity});
+          const first=make(4),second=make(6),boss=make(9,'dutch'),behind=make(11);first.maxHealth=2;
+          bulletState.enemies=[first,second,boss,behind];bulletState.shots=[];
+          emitFourShots({x:2,y:5},'green');
+          const shot=bulletState.shots.find(s=>s.dx===1);
+          shot.speed=10;
+          gameTime+=410;updateShotList([shot]);
+          assert(first.hits===2 && second.hits===2 && !shot.dead,'one shot pierces two Planktons in one step');
+          assert(!bulletState.enemies.includes(first),'killing first enemy does not consume shot');
+          updateShotList([shot]);
+          assert(first.hits===2 && second.hits===2,'same-frame overlap cannot hit twice');
+          gameTime+=20;updateShotList([shot]);
+          assert(second.hits===2 && !shot.dead,'next frame cannot hit same enemy twice');
+          gameTime+=500;updateShotList([shot]);
+          assert(boss.hits===1 && shot.dead && behind.hits===0,'boss takes exactly 1 hp and blocks further travel');
         """)

@@ -16,7 +16,7 @@ class BulletHellTests(unittest.TestCase):
     def test_phase_quotas_speed_only_on_phase_change_and_enemy_profiles(self):
         self.start_bullet()
         self.check("""
-          const classicBest=best,battleRecord=battleBest;
+          const classicBest=best,battleRecord=battleBest;let nextColor='green';
           for(let phase=1;phase<=10;phase++){
             assert(bulletState.phase===phase,'phase '+phase);
             const expected=phase<=4?5:phase<=7?8:10;
@@ -28,11 +28,17 @@ class BulletHellTests(unittest.TestCase):
             if(phase>=5)assert(colors.includes(2),'orange from 5');
             if(phase>=7)assert(colors.includes(3),'red from 7');
             const speed=currentSpeed,interval=bulletState.profile.enemyInterval;
-            for(let i=0;i<expected;i++){
+            let greenCount=0,collections=0;
+            while(bulletState.phase===phase && collections<expected*2){
+              assert(chooseBulletFood()===nextColor,'strict alternating color from phase 1 through phase 11');
               food={...snake[0],type:chooseBulletFood(),id:++foodSerial};bulletState.mainFood=food;
+              if(nextColor==='green')greenCount++;
+              nextColor=nextColor==='green'?'red':'green';collections++;
               assert(collectFood(),'food placed');clearTimeout(timer);
-              if(i<expected-1)assert(bulletState.phase===phase && currentSpeed===speed && bulletState.profile.enemyInterval===interval,'no food speed increase');
+              if(greenCount<expected)assert(bulletState.phase===phase && currentSpeed===speed && bulletState.profile.enemyInterval===interval,'only green advances and food does not accelerate');
             }
+            assert(greenCount===expected,'phase requires green quota');
+            assert(chooseBulletFood()===nextColor,'color preserved across phase boundary');
             assert(bulletState.phase===phase+1 && bulletState.immunityCount===0,'phase transition resets immunity count');
           }
           assert(bulletState.phase===11 && bulletState.enemies.some(e=>e.kind==='dutch'),'boss phase');
@@ -284,13 +290,13 @@ class BulletHellTests(unittest.TestCase):
         self.check("""
           for(const phase of [1,4,5,7,8,10,11,12]){
             beginBulletPhase(phase);placeFood();
-            assert(food.type===chooseFoodType() && (phase<=11?food.type==='green':['green','red'].includes(food.type)),'main food follows phase rules '+phase);
+            assert(food.type===chooseFoodType() && (phase===1?food.type==='green':['green','red'].includes(food.type)),'main food follows phase rules '+phase);
             for(const type of ['normal','red','super']){
               food={...snake[0],type,id:++foodSerial};bulletState.mainFood=food;collectFood();
               assert(bulletState.progress===0,'non-green never progresses phase '+phase);
             }
             food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();
-            assert(bulletState.progress===1 && food.type===(phase>=11?'red':'green'),'only green progresses and next main color follows phase rules');
+            assert(bulletState.progress===1 && food.type==='red','only green progresses and next main color follows phase rules');
           }
           for(const mode of ['classic','battle']){
             gameMode=mode;plankton=null;battleEnemies=[];powers={};battleRewards=0;
@@ -345,4 +351,13 @@ class BulletHellTests(unittest.TestCase):
           const boss=bulletState.enemies.find(e=>e.kind==='dutch');
           damageBulletEnemy(boss,DUTCH_BOSS_HEALTH,0);updateBulletMode();
           assert(bulletState.phase===12 && food.type==='red','boss victory cannot reset pending color to green');
+        """)
+
+    def test_new_game_restarts_alternation_with_green(self):
+        self.start_bullet()
+        self.check("""
+          food={...snake[0],type:'green',id:++foodSerial};bulletState.mainFood=food;collectFood();
+          assert(food.type==='red','phase 1 green followed by red');
+          startGame({skipTutorial:true});clearTimeout(timer);stopMovementGuide();
+          assert(bulletState.phase===1 && food.type==='green','restarting a run resets first color to green');
         """)

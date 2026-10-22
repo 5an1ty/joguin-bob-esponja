@@ -109,7 +109,7 @@ Em tela cheia, o mapa ocupa todo o viewport. A grade tem 14 células no eixo men
 
 ## Bullet Hell e Holandês Voador
 
-`test_bullet_hell.py` cobre metas por fase (5/8/10), velocidade alterada apenas na transição, escudo de 3 segundos a cada 3 lanches, reset do contador, composição de inimigos, sombras/impacto/quatro estilhaços, dano de verdes em Plankton/chefe, aviso sonoro antes do tiro, verdes nas fases 1–10 e alternância estrita verde/vermelho desde a fase 11, inclusive entre fases infinitas e com bônus amarelos separados, desbloqueio persistente e fase infinita. A fase 11 é vencida exclusivamente ao derrotar o chefe, sem cota de verdes. A partir da fase 12, 10 verdes avançam cada fase infinita.
+`test_bullet_hell.py` cobre metas por fase (5/8/10), velocidade alterada apenas na transição, escudo de 3 segundos a cada 3 lanches, reset do contador, composição de inimigos, sombras/impacto/quatro estilhaços, dano de verdes em Plankton/chefe, aviso sonoro antes do tiro, alternância estrita verde/vermelho desde a fase 1, preservada entre fases, na luta contra o chefe e no infinito, com bônus amarelos separados, desbloqueio persistente e fase infinita. A fase 11 é vencida exclusivamente ao derrotar o chefe, sem cota de verdes. A partir da fase 12, 10 verdes avançam cada fase infinita.
 
 Os projéteis verdes saem nas quatro direções **ao coletar** o hambúrguer. O lanche amarelo da habilidade do Bob é um bônus separado, preservando a sequência principal; ele concede imunidade e turbo simultâneos por 6 segundos, sem contar para avançar a fase. A rotação limpa tiros e sombras em trânsito para evitar colisões causadas pela mudança da grade, preservando fase, pontuação e inimigos. Um bônus amarelo ainda não coletado é removido com devolução da recarga.
 

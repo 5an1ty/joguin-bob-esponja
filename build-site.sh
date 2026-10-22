@@ -2,5 +2,5 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p dist
-cp index.html style.css menu.css script.js tutorial.js menu.js mobile.js mobile.css bullet.js dist/
+cp index.html style.css menu.css script.js tutorial.js menu.js mobile.js mobile.css ocean.css bullet.js dist/
 cp -R assets musicas dist/

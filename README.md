@@ -62,3 +62,26 @@ As ondas de canhões ficam mais frequentes e passam de 1 até 4 bombas por lanç
 A trilha `musicas/bgm_menu_mode.mp3` toca no menu e na pausa comum. As escolhas de cartas pausam apenas a simulação, mantendo a música da partida. Continuar retoma a trilha de jogo do ponto em que parou. A entrada no menu tenta iniciar o áudio e repete a tentativa na primeira interação permitida pelo navegador, respeitando Silenciar música/Silenciar tudo.
 
 Após cada escolha de card, a simulação inteira acelera de 0% a 100% em 4 segundos reais: jogador, inimigos, projéteis e temporizadores compartilham um relógio virtual. Uma pausa comum suspende o tempo restante dessa retomada. A música continua sem desacelerar. No infinito, a pressão cresce também com o tempo jogado, mesmo sem coletar comida, aumentando a velocidade e a frequência/densidade dos canhões dentro de limites de desempenho.
+
+## Android e página de download
+
+A interface usa HTML/CSS/JavaScript compartilhados com o jogo web. `ocean.css`
+moderniza a identidade náutica sem alterar o mapa em tela cheia.
+`docs/` é a landing page independente publicada pelo workflow `pages.yml`.
+A página consulta a release mais recente para obter o APK real, com fallback
+para a lista de releases se não houver arquivo ou se a API estiver indisponível.
+
+O projeto Android em `android/` empacota o jogo e as músicas localmente em uma
+WebView, sem exigir conexão ou permissões de rede. Requer Android 8+ e WebView
+atualizada. Para compilar: JDK 17, Android SDK 35 e Gradle 8.10.2;
+execute `bash android/prepare-assets.sh` e `cd android && gradle :app:assembleDebug`.
+O workflow `android.yml` gera um APK instalável, publica-o em uma release e
+mantém a assinatura de desenvolvimento em cache. Essa é uma distribuição de
+teste: se o cache da chave expirar, reinstalar pode ser necessário e apagar
+os dados locais. Para distribuição definitiva, configure uma chave de release
+permanente em secrets antes de migrar a assinatura. Nunca armazene chave privada
+no repositório. A geração automatizada não substitui teste em aparelho Android.
+
+GitHub Pages usa apenas `docs/`; Netlify continua servindo `dist/` com o jogo.
+Caso a conta não permita ativação automática de Pages, selecione
+Settings → Pages → Source → GitHub Actions no repositório.

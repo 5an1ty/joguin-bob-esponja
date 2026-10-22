@@ -1,0 +1,31 @@
+/* Identidade náutica: madeira apenas na moldura, mapa livre em tela cheia. */
+:root{--ocean-ink:#073b57;--ocean-sand:#fff3c6;--ocean-wood:#aa692f}
+body{background:radial-gradient(ellipse at 15% 0,#47e6df,transparent 55%),linear-gradient(165deg,#12bdce,#0875a9 70%,#064b80)}
+.topbar .best{background:#fff0bd;color:#70431e;border:3px solid #cf9251;box-shadow:0 5px 0 #875124,inset 0 0 0 3px #ffe1a0;transform:rotate(2deg)}
+.topbar .best strong{color:#77501b}.brand h1{color:#efffff}.brand h1 span{color:#ffe34a;text-shadow:0 3px #c88a22,0 6px #064d81}
+#menu{border:3px solid #f4ce80;box-shadow:0 7px 0 #995c2c,0 20px 45px #003d6a40}
+#menu .choices{background:#fff9e8}#menu h3{font-size:16px;margin-bottom:16px}.step{background:#087b99;color:white;width:28px;height:28px;flex-shrink:0}
+#menu .character-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:28px}
+#menu .character{border-radius:22px;border-color:#d4b389;box-shadow:0 5px #b18350;padding-bottom:12px}
+#menu .character strong{font-size:14px;white-space:normal;line-height:1.3}.character small{font-size:11px;min-height:32px}
+#menu .character.selected{border-color:#e8ad13;box-shadow:0 5px #b57a12,0 0 0 3px #ffe779}
+#menu .character:disabled{opacity:.7}#menu .character .avatar{height:105px}#menu .avatar img{height:137px}
+#menu .mode-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:28px}
+#menu .mode-choice[data-mode=bullet]{grid-column:1/-1;background:linear-gradient(110deg,#ede4ff,#f8f2ff);border-color:#a58bc9}
+#menu .mode-choice[data-mode=bullet].selected{background:#ded0ff;border-color:#70549d;box-shadow:0 5px #70549d}
+#menu .difficulty small{font-size:11px}#menu .difficulty{min-height:110px}#menu .text-button{min-height:44px;font-size:14px}
+#menu .control-settings{background:#effbfc;border:2px solid #a3d5df;padding:15px;border-radius:18px}#menu .control-settings p{font-size:12px;line-height:1.5}
+#startBtn{min-height:64px;border:3px solid #fff39b;box-shadow:0 6px #b87c16,0 0 0 2px #d79e26;font-size:19px}
+#game:not(:fullscreen):not(.fallback-fullscreen) .board-wrap{border:6px solid #bd8448;box-shadow:0 0 0 3px #f2ce83,0 6px #825126;border-radius:22px}
+#game:not(:fullscreen):not(.fallback-fullscreen){border-color:#f3d594;background:#fff9e8}
+button:focus-visible,a:focus-visible{outline:3px solid #623fa4;outline-offset:4px}
+@media(max-width:650px){
+ body{padding:16px 12px}.topbar{gap:8px}.brand h1{font-size:20px}.brand h1 span{font-size:32px;letter-spacing:3px}.brand>p{font-size:10px}.topbar .best{padding:10px;font-size:12px}.best span{font-size:11px}.best strong{font-size:23px}
+ #menu{border-radius:26px}#menu .intro{display:grid;grid-template-columns:1.2fr 1fr;text-align:left;padding:22px 20px;min-height:200px;gap:0}
+ #menu .hero-copy{width:auto}.intro h2{font-size:30px;letter-spacing:-1px}.intro .welcome{font-size:11px}.hero-copy>p:last-child{font-size:12px}
+ #menu .character-stage{display:block;min-height:160px;height:160px;margin:0}#menu .character-stage>img{height:160px;max-height:none;top:0}.orbit{width:110px;height:110px;top:20px}.hero-caption,.floating-burger,.hero-spark,.orbit-two{display:none}
+ #menu .quick-rules{grid-column:1/-1;margin:18px 0 0;justify-content:space-between;gap:8px}#menu .quick-rules div{font-size:10px}.quick-rules span{height:32px;width:35px;font-size:21px}#menu .seabed{display:none}
+ #menu .choices{padding:25px 17px}#menu .character-options{gap:13px}#menu .character strong{font-size:13px}#menu .character small{font-size:10px}
+ #menu .difficulty small{font-size:10px}#menu .difficulty strong{font-size:13px}#menu .mode-choice small{font-size:12px}#menu .mode-choice{min-height:95px}
+ #startBtn{font-size:16px;gap:8px}.cta-bubbles{display:none}
+}

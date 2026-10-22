@@ -1,2 +1,7 @@
 __pycache__/
 /dist/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/src/main/assets/
+/android/local.properties

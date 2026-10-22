@@ -69,8 +69,8 @@ A interface usa HTML/CSS/JavaScript compartilhados com o jogo web. `ocean.css`
 moderniza a identidade náutica sem alterar o mapa em tela cheia.
 `docs/` é a landing page independente publicada em
 https://5an1ty.github.io/joguin-bob-esponja/docs/ pelo GitHub Pages existente.
-A página consulta a release mais recente para obter o APK real, com fallback
-para a lista de releases se não houver arquivo ou se a API estiver indisponível.
+A página procura a maior versão Android publicada, ignorando reexecuções de
+builds antigos, e mantém o APK confirmado como fallback se a API falhar.
 
 O projeto Android em `android/` empacota o jogo e as músicas localmente em uma
 WebView, sem exigir conexão ou permissões de rede. Requer Android 8+ e WebView

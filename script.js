@@ -2011,6 +2011,10 @@ function draw(alpha = movementProgress(), now = performance.now()) {
   // Interpolação contínua entre passos; a lógica de colisão continua na grade.
   const positions = visualSnakePositions(alpha,now);
   lastVisualPositions = positions;
+  if(character==='patrick') {
+    drawPatrickRainbow(positions);
+    if(positions.length)paintWrapped(positions[0],(x,y)=>paintSnakeSprite(x,y,0));
+  } else {
   ctx.save();
   ctx.globalAlpha = character==='sandy' && sandyImmuneUntil>gameTime ? .45 : hasPower('drill') ? .55 : 1;
   ctx.strokeStyle = character==='dutch'?'#64efb2':character === 'bob' ? '#ffd92e' : '#ff829b';
@@ -2026,6 +2030,7 @@ function draw(alpha = movementProgress(), now = performance.now()) {
   positions.forEach((cell,i) => paintWrapped(cell, (x,y) => {
     paintSnakeSprite(x,y,i);
   }));
+  }
   drawOrbitingGlove(alpha,now);
   drawEyeLaser(alpha,now);
 }
@@ -2357,23 +2362,52 @@ function drawSnake(x, y, i) {
   }
 }
 
+function drawPatrickRainbow(positions) {
+  if(positions.length<2)return;
+  // Unwrap adjacent cells, then repeat only at crossed board edges.
+  const points=[{x:positions[0].x*CELL+10,y:positions[0].y*CELL+10}];
+  for(let i=1;i<positions.length;i++){
+    const from=positions[i-1],to=positions[i],last=points[points.length-1];
+    const dx=((to.x-from.x+COLS*1.5)%COLS)-COLS/2;
+    const dy=((to.y-from.y+ROWS*1.5)%ROWS)-ROWS/2;
+    if(Math.hypot(dx,dy)>.001)points.push({x:last.x+dx*CELL,y:last.y+dy*CELL});
+  }
+  if(points.length<2)return;
+  const normals=points.map((point,i)=>{
+    const before=points[Math.max(0,i-1)],after=points[Math.min(points.length-1,i+1)];
+    const ax=point.x-before.x,ay=point.y-before.y,al=Math.hypot(ax,ay);
+    const bx=after.x-point.x,by=after.y-point.y,bl=Math.hypot(bx,by);
+    const incoming=al?{x:-ay/al,y:ax/al}:{x:-by/bl,y:bx/bl};
+    const outgoing=bl?{x:-by/bl,y:bx/bl}:incoming;
+    const divisor=Math.max(.5,1+incoming.x*outgoing.x+incoming.y*outgoing.y);
+    return {x:(incoming.x+outgoing.x)/divisor,y:(incoming.y+outgoing.y)/divisor};
+  });
+  const pathAt=offset=>{
+    const lane=points.map((p,i)=>({x:p.x+normals[i].x*offset,y:p.y+normals[i].y*offset}));
+    const path=new Path2D();path.moveTo(lane[0].x,lane[0].y);
+    for(let i=1;i<lane.length-1;i++)path.quadraticCurveTo(lane[i].x,lane[i].y,(lane[i].x+lane[i+1].x)/2,(lane[i].y+lane[i+1].y)/2);
+    path.lineTo(lane[lane.length-1].x,lane[lane.length-1].y);return path;
+  };
+  const colors=['#ff5e83','#ff9b42','#ffe766','#8ce05b','#42dbdd','#5c94ff','#bb82ee'];
+  const lanes=colors.map((color,i)=>({color,path:pathAt((i-3)*2.35)}));
+  const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+  const minX=Math.min(...xs)-20,maxX=Math.max(...xs)+20,minY=Math.min(...ys)-20,maxY=Math.max(...ys)+20;
+  ctx.save();applyCharacterEffect();ctx.lineCap='round';ctx.lineJoin='round';
+  for(let tileX=Math.ceil(-maxX/BOARD_WIDTH);tileX<=Math.floor((BOARD_WIDTH-minX)/BOARD_WIDTH);tileX++)for(let tileY=Math.ceil(-maxY/BOARD_HEIGHT);tileY<=Math.floor((BOARD_HEIGHT-minY)/BOARD_HEIGHT);tileY++){
+    ctx.save();ctx.translate(tileX*BOARD_WIDTH,tileY*BOARD_HEIGHT);
+    ctx.lineWidth=2.65;
+    for(const lane of lanes){ctx.strokeStyle=lane.color;ctx.stroke(lane.path);}
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawPatrickSprite(x,y,head) {
+  if(!head)return;
   ctx.save();ctx.translate(x,y);
   const skin=ctx.createLinearGradient(3,1,16,20);
   skin.addColorStop(0,'#ffc0ce');skin.addColorStop(.45,'#ff94b0');skin.addColorStop(1,'#df638d');
   ctx.lineJoin='round';ctx.lineCap='round';
-  if(!head) {
-    // Soft, plump segments keep the silhouette readable even on a small phone.
-    ctx.fillStyle='#a74268';roundRect(1.6,3,16.8,15.4,6);ctx.fill();
-    ctx.fillStyle=skin;roundRect(1.6,1.6,16.8,15.4,6);ctx.fill();
-    ctx.strokeStyle='#ffd9e3';ctx.lineWidth=1.2;
-    ctx.beginPath();ctx.moveTo(5,5.5);ctx.quadraticCurveTo(7,3.5,11.8,4.2);ctx.stroke();
-    ctx.fillStyle='#d85b84';
-    for(const [px,py,r] of [[5.2,12,.65],[14.4,8.8,.8],[12.6,13.5,.5]]){
-      ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);ctx.fill();
-    }
-    ctx.restore();return;
-  }
   // Five rounded limbs, rather than the old triangular head.
   const silhouette=new Path2D();
   silhouette.moveTo(8.6,2);
